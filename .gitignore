@@ -21,3 +21,6 @@ Thumbs.db
 # Environment / secrets
 .env
 .env.*
+
+# Task runner state
+.task/

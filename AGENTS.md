@@ -54,6 +54,7 @@ Before any Go coding, review, debugging, troubleshooting, or setup task, load th
 | 測試 | 標準 `testing` + [stretchr/testify](https://github.com/stretchr/testify) |
 | Lint | golangci-lint v2（設定見 `.golangci.yml`） |
 | 安全掃描 | `govulncheck` + `gosec`（lint 內建） |
+| Task runner | [go-task/task](https://github.com/go-task/task)（`Taskfile.yml`；跨 Windows/Linux/macOS） |
 | 模組路徑 | `github.com/<owner>/my-cli`（小寫、連字號、**必須**與 repo URL 一致） |
 
 > DI 框架：小型 CLI 預設**不引入**；若依賴圖變複雜，先與使用者討論再選型（dig / fx / do / wire）。
@@ -71,7 +72,7 @@ my-cli/
 ├── internal/              # 私有業務邏輯（不可被外部 import）
 ├── testdata/              # 測試 fixtures
 ├── go.mod / go.sum        # go.sum 必須 commit
-├── Makefile
+├── Taskfile.yml           # task runner（go-task；跨平台）
 ├── .gitignore
 ├── .golangci.yml
 └── .github/workflows/     # CI

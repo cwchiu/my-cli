@@ -1,0 +1,69 @@
+version: '3'
+
+vars:
+  BINARY_NAME: my-cli
+  VERSION:
+    sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+  COMMIT:
+    sh: git rev-parse --short HEAD 2>/dev/null || echo none
+  DATE:
+    sh: date -u +%Y-%m-%dT%H:%M:%SZ
+
+tasks:
+  default:
+    desc: 顯示可用 tasks
+    cmds:
+      - task --list
+
+  build:
+    desc: 編譯二進位（注入 version/commit/date）
+    cmds:
+      - go build -ldflags "-X main.version={{.VERSION}} -X main.commit={{.COMMIT}} -X main.date={{.DATE}}" -o {{.BINARY_NAME}}{{exeExt}} ./cmd/my-cli
+    sources:
+      - cmd/**/*.go
+      - go.mod
+      - go.sum
+    generates:
+      - "{{.BINARY_NAME}}{{exeExt}}"
+
+  run:
+    desc: 編譯並執行 version 子命令
+    cmds:
+      - task: build
+      - "{{.BINARY_NAME}}{{exeExt}} version"
+
+  test:
+    desc: 跑全部測試（本機無 -race；-race 僅在 CI）
+    cmds:
+      - go test -shuffle=on ./...
+
+  vet:
+    desc: go vet 靜態檢查
+    cmds:
+      - go vet ./...
+
+  fmt:
+    desc: 格式化（gofumpt + goimports）
+    cmds:
+      - gofmt -s -w .
+      - go run mvdan.cc/gofumpt@latest -w .
+      - go run golang.org/x/tools/cmd/goimports@latest -w .
+
+  lint:
+    desc: golangci-lint run（需已安裝 golangci-lint）
+    cmds:
+      - golangci-lint run
+
+  tidy:
+    desc: go mod tidy 並確認無殘留 diff
+    cmds:
+      - go mod tidy
+      - git diff --exit-code go.mod go.sum
+
+  clean:
+    desc: 移除建置產物
+    cmds:
+      - cmd: rm -f {{.BINARY_NAME}}{{exeExt}}
+        platforms: [linux, darwin]
+      - cmd: cmd /c "if exist {{.BINARY_NAME}}.exe del {{.BINARY_NAME}}.exe"
+        platforms: [windows]
