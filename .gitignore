@@ -1,0 +1,23 @@
+# Binaries
+/my-cli
+/my-cli.exe
+*.exe
+dist/
+
+# Test
+*.test
+*.out
+coverage.*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment / secrets
+.env
+.env.*
