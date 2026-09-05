@@ -34,7 +34,7 @@ func newVersionCmd() *cobra.Command {
 
 Use --output json for machine-readable output.`,
 		Args: wrapUsage(cobra.NoArgs),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			info := versionOutput{
 				Version: version,
 				Commit:  commit,
@@ -47,17 +47,30 @@ Use --output json for machine-readable output.`,
 				if err != nil {
 					return fmt.Errorf("marshal version info: %w", err)
 				}
-				fmt.Fprintln(cmd.OutOrStdout(), string(data))
+
+				if _, err := fmt.Fprintln(cmd.OutOrStdout(), string(data)); err != nil {
+					return fmt.Errorf("print version info: %w", err)
+				}
 			case "table":
 				out := cmd.OutOrStdout()
-				fmt.Fprintf(out, "version: %s\n", info.Version)
-				fmt.Fprintf(out, "commit:  %s\n", info.Commit)
-				fmt.Fprintf(out, "date:    %s\n", info.Date)
+
+				if _, err := fmt.Fprintf(out, "version: %s\n", info.Version); err != nil {
+					return fmt.Errorf("print version: %w", err)
+				}
+
+				if _, err := fmt.Fprintf(out, "commit:  %s\n", info.Commit); err != nil {
+					return fmt.Errorf("print commit: %w", err)
+				}
+
+				if _, err := fmt.Fprintf(out, "date:    %s\n", info.Date); err != nil {
+					return fmt.Errorf("print date: %w", err)
+				}
 			default:
 				// Guarded by MarkFlagCustom below, but keep a defensive
 				// branch so the switch stays exhaustive.
 				return fmt.Errorf("unsupported output format %q", outputFormat)
 			}
+
 			return nil
 		},
 	}
@@ -67,7 +80,7 @@ Use --output json for machine-readable output.`,
 		"output format (table|json)",
 	)
 	_ = cmd.RegisterFlagCompletionFunc("output", func(
-		cmd *cobra.Command, args []string, toComplete string,
+		_ *cobra.Command, _ []string, _ string,
 	) ([]string, cobra.ShellCompDirective) {
 		return []string{"table", "json"}, cobra.ShellCompDirectiveNoFileComp
 	})

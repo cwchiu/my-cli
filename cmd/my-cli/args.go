@@ -14,6 +14,7 @@ func wrapUsage(validate cobra.PositionalArgs) cobra.PositionalArgs {
 		if err := validate(cmd, args); err != nil {
 			return fmt.Errorf("%w: %w", errUsage, err)
 		}
+
 		return nil
 	}
 }

@@ -30,10 +30,13 @@ func run() int {
 	// prints nothing itself; we own both the message and the exit code.
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
+
 		if errors.Is(err, errUsage) {
 			return exitCodeUsageErr
 		}
+
 		return exitCodeGeneralErr
 	}
+
 	return exitCodeOK
 }

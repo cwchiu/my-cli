@@ -280,7 +280,8 @@ GitHub Actions 階段順序：**test → lint → security → release**。
    - **最後變動了什麼**：變更檔案清單與摘要（對應 commit hash）。
    - **驗證結果**：build / vet / test / lint 的實際輸出摘要。
 4. **合併條件**：specs 紀錄不完整視同工作未完成，不得合併回 `main`。
-5. **規範變更**：修改本規範（AGENTS.md）本身也是一個工作項，同樣要有 specs 紀錄。
+5. **Lint 門檻（強制）**：每個工作項的完成條件之一，是 `golangci-lint run` **完全通過（0 issues）**。lint 不通過視同工作未完成，不得合併回 `main`；新增 `//nolint` 抑制必須指名 linter 並附理由（見 §6）。
+6. **規範變更**：修改本規範（AGENTS.md）本身也是一個工作項，同樣要有 specs 紀錄。
 
 ### 10.3 顆粒度規則
 

@@ -13,8 +13,6 @@ import (
 
 // errUsage is re-declared here so validators can wrap it; main.go owns the
 // canonical definition. See main.go for the exit-code mapping.
-//
-//nolint:unused // referenced by subcommand validators in later increments
 var errUsage = errors.New("usage error")
 
 // newRootCmd builds the root command with all persistent flags and
@@ -32,7 +30,7 @@ Run "my-cli <command> --help" for details on a specific command.`,
 		SilenceErrors: true,
 		// The root command itself takes no arguments; subcommands are
 		// invoked explicitly. Unknown subcommands fall through to help.
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return cmd.Help()
 		},
 	}
@@ -45,8 +43,8 @@ Run "my-cli <command> --help" for details on a specific command.`,
 		"config file (default: ./my-cli.yaml then $HOME/.my-cli.yaml)",
 	)
 
-	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		return initConfig(cmd)
+	rootCmd.PersistentPreRunE = func(command *cobra.Command, _ []string) error {
+		return initConfig(command)
 	}
 
 	rootCmd.AddCommand(newVersionCmd())
@@ -77,15 +75,18 @@ func initConfig(cmd *cobra.Command) error {
 		v.SetConfigName("my-cli")
 		v.SetConfigType("yaml")
 		v.AddConfigPath(".")
+
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return fmt.Errorf("resolve home directory: %w", err)
 		}
+
 		v.AddConfigPath(home)
 	}
 
 	if err := v.ReadInConfig(); err != nil {
 		var notFound viper.ConfigFileNotFoundError
+		//nolint:modernize // errors.AsType requires Go 1.26; project targets Go 1.25.
 		if !errors.As(err, &notFound) {
 			return fmt.Errorf("read config: %w", err)
 		}
@@ -93,6 +94,7 @@ func initConfig(cmd *cobra.Command) error {
 	}
 
 	cmd.SetContext(context.WithValue(cmd.Context(), viperKey{}, v))
+
 	return nil
 }
 

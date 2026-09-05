@@ -43,16 +43,14 @@ tasks:
       - go vet ./...
 
   fmt:
-    desc: 格式化（gofumpt + goimports）
+    desc: 格式化（golangci-lint fmt：gofumpt + goimports）
     cmds:
-      - gofmt -s -w .
-      - go run mvdan.cc/gofumpt@latest -w .
-      - go run golang.org/x/tools/cmd/goimports@latest -w .
+      - go tool golangci-lint fmt
 
   lint:
-    desc: golangci-lint run（需已安裝 golangci-lint）
+    desc: golangci-lint run（經 go.mod tool directive，無需另裝 PATH）
     cmds:
-      - golangci-lint run
+      - go tool golangci-lint run
 
   tidy:
     desc: go mod tidy 並確認無殘留 diff
