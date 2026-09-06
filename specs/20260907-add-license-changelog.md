@@ -43,7 +43,7 @@
   （Copyright 2026 cwchiu + 授權條款摘錄）。
 - `.gitattributes`（修改）：新增 `LICENSE text eol=lf`。
 - `specs/20260907-add-license-changelog.md`（新增）：本紀錄。
-- commit：`8e2d707` `docs: add Apache-2.0 LICENSE and CHANGELOG`
+- commit：`b7044ba` `docs: add Apache-2.0 LICENSE and CHANGELOG`（本行 hash 由後續補記 commit 填入，amend 會改變自身 hash，故不再 amend）
 
 ## 驗證結果
 
