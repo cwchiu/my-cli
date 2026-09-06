@@ -22,8 +22,11 @@ jobs:
         with:
           go-version: stable
 
+      # 不用 golang/govulncheck-action：其內建 module cache 還原會在既有快取上
+      # 重複解壓，產生大量 tar "Cannot open: File exists" 錯誤註解（job 仍成功）。
+      # 直接 go run 掃描，行為與本地 task security:govulncheck 一致。
       - name: Run govulncheck
-        uses: golang/govulncheck-action@v1
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
   osv-scanner:
     name: SCA - osv-scanner

@@ -58,6 +58,22 @@ tasks:
       - go mod tidy
       - git diff --exit-code go.mod go.sum
 
+  security:govulncheck:
+    desc: govulncheck 掃描（呼叫點分析，標準库+依賴）
+    cmds:
+      - go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  security:osv:
+    desc: osv-scanner 掃描 go.mod（與 CI 同版本 v2.5.1）
+    cmds:
+      - go run github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.5.1 scan --lockfile=go.mod
+
+  security:all:
+    desc: 全部安全掃描（govulncheck + osv-scanner）
+    cmds:
+      - task: security:govulncheck
+      - task: security:osv
+
   clean:
     desc: 移除建置產物
     cmds:
