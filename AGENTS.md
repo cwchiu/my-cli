@@ -235,7 +235,8 @@ GitHub Actions 階段順序：**test → lint → security（SAST + SCA + Secret
 - SCA：`govulncheck`（官方 action）+ `osv-scanner`（lockfile 掃描，SARIF 上傳）
 - Secret：`gitleaks`（全歷史掃描，`fetch-depth: 0`；誤報以 `.gitleaks.toml` allowlist 處理，不得關閉掃描）
 - release：GoReleaser（CLI 發布標配，見後續工作項）
-- Dependabot 自動更新（gomod + github-actions，見 `.github/dependabot.yml`）；Actions 釘 major 版本；workflow 設最小權限 `permissions:`。
+- Dependabot 自動更新（gomod + github-actions，見 `.github/dependabot.yml`）；workflow 設最小權限 `permissions:`。
+- **Action pin 查證（強制）**：pin 任何 GitHub Action 前，一律以 GitHub API（`GET /repos/<owner>/<repo>/tags`）驗證 tag 存在。並非所有 repo 發布 floating major tag——例如 `securego/gosec`、`google/osv-scanner-action` 只有確切 semver tag。無 major tag 的 repo 釘確切 semver，依賴 Dependabot（github-actions ecosystem）更新（fix-ci-action-tags 實例：`@v2` 不存在，Actions 報 "Unable to resolve action"）。
 
 ---
 
@@ -269,6 +270,7 @@ GitHub Actions 階段順序：**test → lint → security（SAST + SCA + Secret
 7. **合併後驗證（強制）**：合併不是終點——**合併後必須在主 repo 重跑完整驗證**（`go tool golangci-lint run` 0 issues、`go test -shuffle=on ./...`、`go build ./...`），全綠才算工作項完成。教訓：ff merge 引入 `.gitattributes` 時 git 不會對既有檔案重新套用 attributes，合併後 main 上 lint 才爆（fix-eol 工作項實例）。若合併後驗證失敗，**先修復再清理 worktree**（必要時開新的 fix 工作項）。
 8. **終端 cwd 紀律（強制）**：每個終端命令執行前，確認 cwd 在預期的 worktree（`Set-Location` 後持續使用；或一律用 `git -C <path>` / `Set-Location` 明確指定）。教訓：cwd 漂移曾讓 `go get` / `go mod tidy` 在主 repo 執行，污染主 repo 的 `go.mod`/`go.sum`（add-taskfile 工作項實例）。若發現主 repo 出現非預期變更，立即 `git -C <主repo> checkout -- <檔案>` 還原。
 9. **git 診斷以可靠輸出為準**：本機環境（`core.autocrlf=true`）下，裸 `git diff` 對 EOL-only 變更顯示為空、pwsh 管線可能吞掉 git 輸出——診斷一律以 `git status --short` + `git ls-files --eol` + `git hash-object <file>`（比對 `git rev-parse HEAD:<file>`）為準，不依賴裸 `git diff` 的「無輸出」判斷「無變化」。
+10. **push 後遠端驗證（強制）**：涉及 `.github/` 的變更 push 後，必須確認遠端實際執行結果——Actions workflow 能解析、每個 action 能解析並執行、job 結果符合預期；Dependabot 設定生效（必要時手動觸發 "Update dependencies now"）。本機四關綠 ≠ 遠端綠（fix-security-yaml、fix-ci-action-tags 實例：invalid YAML 與幽靈 tag 都是推到遠端才爆）。
 
 ### 10.2 工作紀錄（specs/，強制）
 
@@ -293,6 +295,8 @@ GitHub Actions 階段順序：**test → lint → security（SAST + SCA + Secret
 1. **一次只做一件事**：一個 commit / 一次編輯只處理一個關注點（新功能、重構、修 bug、格式化不得混在同一變更）。
 2. **小而聚焦的 diff**：單一變更以 100–500 行為上限（`golang-refactoring` 標準）；能拆就拆。
 3. **每步驗證（不破壞原有功能的閘門）**：每次編輯後立即以 **build → vet → lint → test** 四關驗證（本機：`go build ./...`、`go vet ./...`、`go tool golangci-lint run`、`go test -shuffle=on ./...`），**四關全過才進下一步**。教訓：修 lint 時曾引入 `undefined: cmd` 編譯錯誤（add-lint-config 工作項實例）——任何「順手的小修」都可能破壞功能，必須當場驗證。行為變更前先確認既有測試全綠；新增行為先補測試。
+   - **編輯後回讀（強制）**：工具回傳成功 ≠ 變更落點正確。每次 `replace_string_in_file` / `insert_edit_into_file` 後，立即 `read_file` 回讀變更區域確認內容與位置正確（fix-security-yaml 實例：編輯成功套用到錯誤位置，造成 invalid YAML）。
+   - **YAML 第五關（強制，僅 YAML/設定檔變更）**：改動任何 `.yml`/`.yaml`（含 `.github/**`）後，必須以 parser 驗證可解析，不得只靠肉眼檢查：`uv run --with pyyaml python -c "import yaml,glob; [yaml.safe_load(open(f,encoding='utf-8')) for f in glob.glob('.github/**/*.yml',recursive=True)]; print('YAML OK')"`（fix-security-yaml 實例：invalid YAML 到 Actions 才爆）。
 4. **先說明再動手**：變更前簡述要做什麼、為什麼；重大變更（跨套件搬移、exported API 變更、刪除）先取得使用者同意。
 5. **重構與行為變更分離**：絕不混合結構性與行為性變更。
 6. **風險分級**：Low（改名/抽變數）→ build+vet+test 即可；Medium（抽函式）→ 加目標測試；High（簽名變更/搬套件）→ 完整安全網 + 人工 checkpoint。
@@ -322,6 +326,10 @@ GitHub Actions 階段順序：**test → lint → security（SAST + SCA + Secret
 | 新依賴直接 `go get` | 先問使用者再 `go get` |
 | `go get -tool go-task/task/cmd/task`（repo path） | `go get -tool github.com/go-task/task/v3/cmd/task`（完整 module path） |
 | 依賴裸 `git diff` 判斷「無變化」 | `git status --short` + `git ls-files --eol` + hash 比對 |
+| 編輯工具回傳成功就繼續 | 編輯後 `read_file` 回讀變更區域確認內容與位置 |
+| YAML 只靠肉眼檢查 | `uv run --with pyyaml python` parser 驗證（第五關） |
+| Action 直接釘 `@v2` 等 major tag | 先以 GitHub API 查 tag 是否存在；無 major tag 則釘確切 semver |
+| push 完就收工 | push 後確認 Actions 解析/job 結果與 Dependabot 生效 |
 | 合併後直接清理收工 | 合併後在 main 重跑 lint/test/build 全綠才算完成 |
 | 一個 PR 混雜重構+新功能 | 分開、各 100–500 行 |
 | 憑直覺最佳化 | 先 profile，benchstat 對比 |
