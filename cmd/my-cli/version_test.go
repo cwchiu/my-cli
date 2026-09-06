@@ -96,12 +96,12 @@ func TestVersionCommandUsageErrors(t *testing.T) {
 	}{
 		{
 			name:    "unexpected positional argument",
-			args:    []string{"version", "extra"},
+			args:    []string{argVersion, "extra"},
 			wantMsg: "unknown command",
 		},
 		{
 			name:    "unknown flag",
-			args:    []string{"version", "--nope"},
+			args:    []string{argVersion, "--nope"},
 			wantMsg: "unknown flag",
 		},
 	}
@@ -124,5 +124,5 @@ func TestRootCommandHelp(t *testing.T) {
 	out, err := executeCommand(t)
 	require.NoError(t, err)
 	assert.Contains(t, out, "Available Commands:")
-	assert.Contains(t, out, "version")
+	assert.Contains(t, out, argVersion)
 }
