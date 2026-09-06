@@ -1,0 +1,12 @@
+# gitleaks configuration
+# https://github.com/gitleaks/gitleaks#configuration
+#
+# Default rules are sufficient for this project. This file exists as the
+# documented place to add allowlists when false positives appear — add them
+# under [[allowlists]] with a regex or path rule, never by disabling the scan.
+
+title = "my-cli gitleaks config"
+
+[allowlist]
+description = "Project-wide allowlist (empty by default; add regex/path rules here when false positives appear)"
+paths = []

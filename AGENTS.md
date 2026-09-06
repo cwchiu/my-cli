@@ -226,14 +226,16 @@ my-cli/
 
 ## 9. CI / 品質關卡（`golang-continuous-integration`）
 
-GitHub Actions 階段順序：**test → lint → security → release**。
+GitHub Actions 階段順序：**test → lint → security（SAST + SCA + Secret）→ release**。
 
-- test：`go test -race -shuffle=on -coverprofile=coverage.out ./...`
-- 依賴整潔：`go mod tidy && git diff --exit-code`
-- lint：golangci-lint-action
-- security：`govulncheck` + `gosec`（或 CodeQL）
-- release：GoReleaser（CLI 發布標配）
-- Dependabot/Renovate 自動更新；Actions 釘 major 版本；workflow 設最小權限 `permissions:`。
+- test：`go test -race -shuffle=on -coverprofile=coverage.out ./...`（matrix：固定 Go 版本 + stable；`-race` 僅 CI，本機無 gcc 改跑 `go test -shuffle=on ./...`）
+- 依賴整潔：`go mod tidy && git diff --exit-code go.mod go.sum`
+- lint：`go vet` + golangci-lint-action
+- SAST：`gosec`（SARIF 上傳）+ CodeQL（`security-extended` queries，見 `.github/codeql/codeql-config.yml`）
+- SCA：`govulncheck`（官方 action）+ `osv-scanner`（lockfile 掃描，SARIF 上傳）
+- Secret：`gitleaks`（全歷史掃描，`fetch-depth: 0`；誤報以 `.gitleaks.toml` allowlist 處理，不得關閉掃描）
+- release：GoReleaser（CLI 發布標配，見後續工作項）
+- Dependabot 自動更新（gomod + github-actions，見 `.github/dependabot.yml`）；Actions 釘 major 版本；workflow 設最小權限 `permissions:`。
 
 ---
 
