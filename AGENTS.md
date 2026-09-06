@@ -264,6 +264,9 @@ GitHub Actions 階段順序：**test → lint → security → release**。
    git branch -d feat/<topic>
    ```
 6. **清理**：合併後立即移除 worktree 與分支；`git worktree list` 應只剩主 repo。
+7. **合併後驗證（強制）**：合併不是終點——**合併後必須在主 repo 重跑完整驗證**（`go tool golangci-lint run` 0 issues、`go test -shuffle=on ./...`、`go build ./...`），全綠才算工作項完成。教訓：ff merge 引入 `.gitattributes` 時 git 不會對既有檔案重新套用 attributes，合併後 main 上 lint 才爆（fix-eol 工作項實例）。若合併後驗證失敗，**先修復再清理 worktree**（必要時開新的 fix 工作項）。
+8. **終端 cwd 紀律（強制）**：每個終端命令執行前，確認 cwd 在預期的 worktree（`Set-Location` 後持續使用；或一律用 `git -C <path>` / `Set-Location` 明確指定）。教訓：cwd 漂移曾讓 `go get` / `go mod tidy` 在主 repo 執行，污染主 repo 的 `go.mod`/`go.sum`（add-taskfile 工作項實例）。若發現主 repo 出現非預期變更，立即 `git -C <主repo> checkout -- <檔案>` 還原。
+9. **git 診斷以可靠輸出為準**：本機環境（`core.autocrlf=true`）下，裸 `git diff` 對 EOL-only 變更顯示為空、pwsh 管線可能吞掉 git 輸出——診斷一律以 `git status --short` + `git ls-files --eol` + `git hash-object <file>`（比對 `git rev-parse HEAD:<file>`）為準，不依賴裸 `git diff` 的「無輸出」判斷「無變化」。
 
 ### 10.2 工作紀錄（specs/，強制）
 
@@ -287,12 +290,13 @@ GitHub Actions 階段順序：**test → lint → security → release**。
 
 1. **一次只做一件事**：一個 commit / 一次編輯只處理一個關注點（新功能、重構、修 bug、格式化不得混在同一變更）。
 2. **小而聚焦的 diff**：單一變更以 100–500 行為上限（`golang-refactoring` 標準）；能拆就拆。
-3. **每步驗證**：每次編輯後立即以 build / vet / lint / 相關測試驗證，不通過不進下一步。
+3. **每步驗證（不破壞原有功能的閘門）**：每次編輯後立即以 **build → vet → lint → test** 四關驗證（本機：`go build ./...`、`go vet ./...`、`go tool golangci-lint run`、`go test -shuffle=on ./...`），**四關全過才進下一步**。教訓：修 lint 時曾引入 `undefined: cmd` 編譯錯誤（add-lint-config 工作項實例）——任何「順手的小修」都可能破壞功能，必須當場驗證。行為變更前先確認既有測試全綠；新增行為先補測試。
 4. **先說明再動手**：變更前簡述要做什麼、為什麼；重大變更（跨套件搬移、exported API 變更、刪除）先取得使用者同意。
 5. **重構與行為變更分離**：絕不混合結構性與行為性變更。
 6. **風險分級**：Low（改名/抽變數）→ build+vet+test 即可；Medium（抽函式）→ 加目標測試；High（簽名變更/搬套件）→ 完整安全網 + 人工 checkpoint。
 7. **出錯就回退**：從乾淨的 committed baseline 出發；修不好就 revert，不往前硬 debug。
 8. **除錯守則**（`golang-troubleshooting`）：沒有根因不修；先重現（失敗測試）再修；一次只驗證一個假設；嘗試 3 次以上仍失敗 = 心智模型錯了，停下來重新分析。
+9. **依賴操作紀律**：`go get -tool` 必須用**完整 module path**（如 `github.com/go-task/task/v3/cmd/task`，不是 repo path `go-task/task/...`）；`go get` / `go mod tidy` 只在 worktree cwd 執行（見 §10.1 第 8 條）；執行後立即 `git diff go.mod go.sum` 確認變更落在預期的 worktree。
 
 ---
 
@@ -314,6 +318,9 @@ GitHub Actions 階段順序：**test → lint → security → release**。
 | `math/rand` 產生 token | `crypto/rand` |
 | 手刻 worker pool | `errgroup` + `SetLimit` |
 | 新依賴直接 `go get` | 先問使用者再 `go get` |
+| `go get -tool go-task/task/cmd/task`（repo path） | `go get -tool github.com/go-task/task/v3/cmd/task`（完整 module path） |
+| 依賴裸 `git diff` 判斷「無變化」 | `git status --short` + `git ls-files --eol` + hash 比對 |
+| 合併後直接清理收工 | 合併後在 main 重跑 lint/test/build 全綠才算完成 |
 | 一個 PR 混雜重構+新功能 | 分開、各 100–500 行 |
 | 憑直覺最佳化 | 先 profile，benchstat 對比 |
 
