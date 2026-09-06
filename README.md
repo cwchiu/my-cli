@@ -1,0 +1,163 @@
+# my-cli
+
+[![Tests](https://github.com/cwchiu/my-cli/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/cwchiu/my-cli/actions/workflows/test.yml?query=branch%3Amain)
+[![Lint](https://github.com/cwchiu/my-cli/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/cwchiu/my-cli/actions/workflows/lint.yml?query=branch%3Amain)
+[![Security](https://github.com/cwchiu/my-cli/actions/workflows/security.yml/badge.svg?branch=main)](https://github.com/cwchiu/my-cli/actions/workflows/security.yml?query=branch%3Amain)
+[![Secrets](https://github.com/cwchiu/my-cli/actions/workflows/secrets.yml/badge.svg?branch=main)](https://github.com/cwchiu/my-cli/actions/workflows/secrets.yml?query=branch%3Amain)
+![Coverage](https://img.shields.io/badge/coverage-85.9%25-brightgreen)
+![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)
+
+A multi-subcommand CLI tool built with [Cobra](https://github.com/spf13/cobra) and
+[Viper](https://github.com/spf13/viper), following production-grade Go practices:
+structured errors, layered configuration, machine-readable output, and a CI
+pipeline covering test, lint, SAST, SCA, and secret scanning.
+
+## Demo
+
+```console
+$ my-cli version
+version: dev
+commit:  none
+date:    unknown
+
+$ my-cli version --output json
+{
+    "version": "dev",
+    "commit": "none",
+    "date": "unknown"
+}
+```
+
+## Getting started
+
+### Requirements
+
+- Go **1.26** or later (see `go.mod` for the exact `go`/`toolchain` directives)
+- [Task](https://taskfile.dev) (optional but recommended — cross-platform task runner)
+
+### Install
+
+```console
+$ go install github.com/cwchiu/my-cli/cmd/my-cli@latest
+```
+
+Or build from source:
+
+```console
+$ git clone https://github.com/cwchiu/my-cli.git
+$ cd my-cli
+$ task build          # or: go build -o bin/my-cli ./cmd/my-cli
+```
+
+The build injects version information via `-ldflags`; `task build` fills in
+version, commit, and build date automatically.
+
+### Run
+
+```console
+$ my-cli --help
+$ my-cli version
+$ my-cli version -o json
+```
+
+## Commands
+
+| Command   | Description                                  |
+| --------- | -------------------------------------------- |
+| `version` | Print version, commit, and build date.       |
+
+Global flags:
+
+| Flag           | Description                                                        |
+| -------------- | ------------------------------------------------------------------ |
+| `-c, --config` | Path to a config file (optional).                                   |
+| `-h, --help`   | Show help for any command.                                          |
+
+`version` accepts `--output, -o table|json` (default `table`) for machine-readable output.
+
+### Exit codes
+
+| Code | Meaning                                     |
+| ---- | ------------------------------------------- |
+| `0`  | Success.                                    |
+| `1`  | General error.                              |
+| `2`  | Usage error (bad flag or argument).         |
+
+`my-cli` writes data to **stdout** and logs/errors to **stderr**, so it is safe
+to use in pipelines.
+
+## Configuration
+
+Configuration is resolved by Viper with the following precedence
+(highest first):
+
+```
+set > flag > env > config file > defaults
+```
+
+- **Config file** (optional): `--config path/to/file`, otherwise searched as
+  `my-cli.yaml` in the current directory, then `$HOME`. A missing file is not
+  an error; a file that exists but fails to parse is.
+- **Environment variables**: prefixed with `MYCLI_`, with `.` mapped to `_`.
+  For example, `MYCLI_LOG_LEVEL=debug` sets the `log.level` key.
+
+## Development
+
+All common workflows are defined in [`Taskfile.yml`](Taskfile.yml):
+
+```console
+$ task            # list available tasks
+$ task build      # build the binary with version ldflags
+$ task test       # run tests (shuffled)
+$ task vet        # go vet
+$ task lint       # golangci-lint
+$ task fmt        # gofumpt + goimports
+$ task tidy       # go mod tidy
+$ task security:all   # govulncheck + osv-scanner
+```
+
+The local quality gate is **build → vet → lint → test**; all four must pass
+before a change is merged. The race detector (`-race`) runs in CI, which has a
+C toolchain available.
+
+### Coverage
+
+Current statement coverage: **85.9%**, with a project floor of **85%**.
+
+```console
+$ go test -coverprofile=coverage.out ./...
+$ go tool cover -func=coverage.out
+```
+
+Coverage focuses on the command surface: exit-code mapping in `run()`,
+configuration loading in `initConfig`, and every `version` output format.
+`main()` itself is a thin `os.Exit(run())` wrapper and is intentionally excluded.
+
+## CI / Quality
+
+GitHub Actions runs four pipelines on every push and pull request:
+
+| Workflow                                        | Purpose                                                        |
+| ----------------------------------------------- | -------------------------------------------------------------- |
+| [Tests](.github/workflows/test.yml)             | `go test -race -shuffle=on` with coverage, Go version matrix.   |
+| [Lint](.github/workflows/lint.yml)              | `go vet` + `golangci-lint`.                                     |
+| [Security](.github/workflows/security.yml)      | `gosec`, CodeQL, `govulncheck`, `osv-scanner`.                  |
+| [Secrets](.github/workflows/secrets.yml)        | `gitleaks` full-history secret scan.                            |
+
+Dependabot keeps `gomod` and GitHub Actions dependencies up to date.
+
+## Contributing
+
+Changes are made in a [`git worktree`](https://git-scm.com/docs/git-worktree)
+branched from `main`, kept small enough to review in one sitting, and verified
+with the four local gates before merging. Each work item leaves an audit record
+under [`specs/`](specs/). See [`AGENTS.md`](AGENTS.md) for the full conventions.
+
+1. Fork the repository and create a worktree: `git worktree add ../my-cli-wt/<topic> -b feat/<topic>`
+2. Make a focused change and add or update tests.
+3. Run `task build vet lint test` and ensure all four pass.
+4. Open a pull request describing the *why*.
+
+## License
+
+License terms are TBD; a `LICENSE` file will be added in an upcoming change.
