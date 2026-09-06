@@ -6,6 +6,7 @@
 [![Secrets](https://github.com/cwchiu/my-cli/actions/workflows/secrets.yml/badge.svg?branch=main)](https://github.com/cwchiu/my-cli/actions/workflows/secrets.yml?query=branch%3Amain)
 ![Coverage](https://img.shields.io/badge/coverage-85.9%25-brightgreen)
 ![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 A multi-subcommand CLI tool built with [Cobra](https://github.com/spf13/cobra) and
 [Viper](https://github.com/spf13/viper), following production-grade Go practices:
@@ -160,4 +161,20 @@ under [`specs/`](specs/). See [`AGENTS.md`](AGENTS.md) for the full conventions.
 
 ## License
 
-License terms are TBD; a `LICENSE` file will be added in an upcoming change.
+Licensed under the [Apache License 2.0](LICENSE).
+
+```
+Copyright 2026 cwchiu
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+```

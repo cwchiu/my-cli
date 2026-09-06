@@ -7,6 +7,7 @@
 *.md text eol=lf
 *.mod text eol=lf
 *.sum text eol=lf
+LICENSE text eol=lf
 
 # Windows 專屬檔案維持 CRLF
 *.bat text eol=crlf
