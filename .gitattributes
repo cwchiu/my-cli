@@ -1,0 +1,19 @@
+# 強制 LF 行尾：gofumpt（golangci-lint formatter）要求 LF，
+# Windows 的 core.autocrlf=true 會在 checkout 時把 Go 檔案轉成 CRLF，
+# 導致 lint 門檻（AGENTS.md §10.2 第 5 條）誤報。
+*.go text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf
+*.mod text eol=lf
+*.sum text eol=lf
+
+# Windows 專屬檔案維持 CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# 二進位檔案不做任何轉換
+*.png binary
+*.jpg binary
+*.gif binary
