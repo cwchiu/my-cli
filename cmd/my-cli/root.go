@@ -85,9 +85,7 @@ func initConfig(cmd *cobra.Command) error {
 	}
 
 	if err := v.ReadInConfig(); err != nil {
-		var notFound viper.ConfigFileNotFoundError
-		//nolint:modernize // errors.AsType requires Go 1.26; project targets Go 1.25.
-		if !errors.As(err, &notFound) {
+		if _, ok := errors.AsType[viper.ConfigFileNotFoundError](err); !ok {
 			return fmt.Errorf("read config: %w", err)
 		}
 		// No config file found — that is fine, defaults and env still apply.

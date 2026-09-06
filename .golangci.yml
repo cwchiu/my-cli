@@ -142,7 +142,9 @@ formatters:
     # - swaggo   # swaggo comment formatting — only for swaggo users
   settings:
     gofumpt:
-      extra-rules: true
+      extra:
+        # 舊 `extra-rules: true` 已棄用，官方對應新設定為 extra.group-params。
+        group-params: true
   exclusions:
     generated: lax
     paths:
