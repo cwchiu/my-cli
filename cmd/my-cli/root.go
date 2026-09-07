@@ -48,6 +48,7 @@ Run "my-cli <command> --help" for details on a specific command.`,
 	}
 
 	rootCmd.AddCommand(newVersionCmd())
+	rootCmd.AddCommand(newOpenaiChatTestCmd())
 
 	return rootCmd
 }
