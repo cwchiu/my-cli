@@ -147,6 +147,25 @@ GitHub Actions runs four pipelines on every push and pull request:
 
 Dependabot keeps `gomod` and GitHub Actions dependencies up to date.
 
+## Releasing
+
+Releases are automated with [GoReleaser](https://goreleaser.com) via the
+[Release](.github/workflows/release.yml) workflow, triggered by pushing a
+`v*` tag:
+
+```console
+$ git tag v0.1.0
+$ git push origin v0.1.0
+```
+
+The workflow builds `linux` / `darwin` / `windows` binaries for `amd64` and
+`arm64` with version ldflags injected, generates `checksums.txt`, and publishes
+a GitHub Release with a changelog from git history. GoReleaser runs in CI via
+`goreleaser-action` and is intentionally **not** a `go.mod` tool dependency
+(its dependency tree is huge and unrelated to this CLI). Validate the config
+locally with `task release:check`, or dry-run the build with
+`task release:build` (snapshot mode, no publish).
+
 ## Contributing
 
 Changes are made in a [`git worktree`](https://git-scm.com/docs/git-worktree)

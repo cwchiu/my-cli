@@ -74,6 +74,16 @@ tasks:
       - task: security:govulncheck
       - task: security:osv
 
+  release:check:
+    desc: 驗證 .goreleaser.yaml（go run 臨時執行，不進 go.mod；與 CI 同版本 v2.18.1）
+    cmds:
+      - go run github.com/goreleaser/goreleaser/v2@v2.18.1 check
+
+  release:build:
+    desc: 本地試 build release 產物（跳過 publish；需先有 tag 或 --snapshot）
+    cmds:
+      - go run github.com/goreleaser/goreleaser/v2@v2.18.1 release --snapshot --skip=publish --clean
+
   clean:
     desc: 移除建置產物
     cmds:
