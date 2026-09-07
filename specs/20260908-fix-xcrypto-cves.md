@@ -49,8 +49,8 @@ GitHub code-scanning（CodeQL SCA）在 `go.mod` 上報了 3 個 open 安全警�
 | `go.sum` | x/crypto v0.55.0 → v0.56.0 的 h1/go.mod 雜湊各 1 行（共 2 行替換） |
 | `specs/20260908-fix-xcrypto-cves.md` | 本紀錄檔（新增） |
 
-- Commit：`fix: upgrade golang.org/x/crypto to v0.56.0 (CVE-2026-56855, CVE-2026-78662)`
-- PR：合併後補上 PR 編號與 merge commit hash。
+- Commit：`72ddf10` — `fix: upgrade golang.org/x/crypto to v0.56.0 (CVE-2026-56855, CVE-2026-78662)`
+- PR：[#3](https://github.com/cwchiu/my-cli/pull/3)，merge commit `2874617`（2026-09-07T16:52:33Z 合併，11 checks 全綠）。
 
 ## 驗證結果
 
@@ -65,4 +65,24 @@ GitHub code-scanning（CodeQL SCA）在 `go.mod` 上報了 3 個 open 安全警�
 
 **diff 範圍確認**：`git diff --stat` → 僅 `go.mod`（2 行）、`go.sum`（4 行）；`git status` 無其他非預期變更；主 repo `D:\tmp\my-cli` 乾淨未受污染。
 
-**合併後（待補）**：main 四關重跑、遠端 CodeQL 掃描確認 alert #3/#4 轉 fixed、alert #2 保留 open（accepted risk，理由見 What 節）。
+**合併後（2026-09-08 驗證）：**
+
+- main（`2874617`）四關重跑：build ✅、vet ✅、lint **0 issues**、test `ok ... 0.731s`。
+- 遠端 code-scanning alerts（`gh api .../code-scanning/alerts`）：
+
+| Alert | 規則 | 狀態 | 說明 |
+|---|---|---|---|
+| #4 | CVE-2026-56855 | **fixed** | v0.56.0 超出受影響範圍，自動關閉 |
+| #3 | CVE-2026-78662 | **fixed** | 同上 |
+| #2 | GO-2026-5932 | fixed | 舊實例隨 v0.55.0 消失而關閉 |
+| #5 | GO-2026-5932 | **open** | 新實例：v0.56.0 同樣無修復版本（openpgp 所有版本皆受影響） |
+| #1 | CVE-2026-84304 | fixed | gRPC OOM（先前已修復） |
+
+- **淨結果**：open 警告 3 → 1，剩餘的 #5 即 openpgp accepted risk——本專案不 import openpgp（govulncheck 呼叫圖證明），無修復版本存在，保留 open 並以本檔作為評估紀錄；日後若要讓 Security tab 歸零，可將 #5 dismiss 為 "Not used" 並引用本檔理由。
+- worktree `fix-xcrypto` 與分支 `fix/xcrypto-cves`（本地+遠端）已清理；`git worktree list` 僅剩主 repo。
+
+## 流程檢討（2026-09-08）
+
+- **錯誤**：合併後才發現 specs 缺少合併後驗證結果，另開了 `docs/xcrypto-spec-result` worktree 準備補交——這違反「一個工作項一份完整紀錄」的精神，也多製造一次 PR 往返。
+- **正確做法**：specs 的「合併後驗證」段落應在**合併前就預留並盡量填寫可預知的內容**（如預期 alert 狀態變化）；合併後若僅需補實測數測數據，屬於**同一工作項的收尾**，直接在 main 上以小 commit 補齊即可，不另開工作項/PR。
+- **本次處置**：經使用者同意，本檔直接在 main 合併（docs commit），不另開 PR。
