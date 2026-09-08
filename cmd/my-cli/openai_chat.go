@@ -20,7 +20,7 @@ const testPrompt = "Say 'OK'."
 
 // envAPIKey is the environment variable consulted when --key is not given.
 //
-//nolint:gosec // G101 false positive: this is an environment variable name, not a credential.
+// #nosec G101 -- this is an environment variable name, not a credential.
 const envAPIKey = "OPENAI_API_KEY"
 
 // Output format values shared by commands that support --output.

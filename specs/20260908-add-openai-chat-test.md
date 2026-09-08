@@ -58,6 +58,8 @@
 5. **output format 驗證時機錯誤**：`--output xml` 的錯誤原本在 HTTP 請求**之後**才回報，測試拿到的是 dial 錯誤而非格式錯誤——驗證應在網路 I/O 前 fail-fast。
 6. **timeout 測試拖慢 5 秒**：handler 用 `time.Sleep(5s)` 模擬慢伺服器，`ts.Close()` 會等 handler 結束，整個測試被拖住；且違反 §5「禁止 time.Sleep」。
 7. **revive unused-parameter**：timeout 測試的 handler 改寫後 `w` 參數未使用。
+8. **gosec G101 在 CI 開 alert，本機 lint 卻 0 issues**：PR 掃描（`refs/pull/4/merge`）由獨立的 `securego/gosec` action（`security.yml` gosec job）執行，它**不讀 `.golangci.yml`、不認 `//nolint` 指令**——`//nolint:gosec` 只被 golangci-lint 的 gosec wrapper 尊重，兩者抑制語意不同（code-scanning alert #6）。
+9. **timeout 測試間歇性卡死 10 分鐘（flaky）**：`#nosec` 修改後重跑四關，`TestOpenaiChatTestTimeout` 卡死至 10 分鐘 panic——handler 卡在 `<-r.Context().Done()`，`httptest.Server blocked in Close after 5 seconds`。同程式碼先前 3 次全綠，屬 timing race 掩蓋的設計缺陷。
 
 ## 如何解決
 
@@ -73,19 +75,21 @@
 5. **fail-fast**：output format 驗證移入 `resolveChatTestConfig`（RunE 一開始就呼叫），錯誤在送出任何請求前回報。
 6. **timeout 測試**：handler 改為 `<-r.Context().Done()`（等 client 斷線），client timeout 觸發後 handler 立即返回；測試時間 5s → 0.7s，且不再用 `time.Sleep`。
 7. **revive**：未使用參數改為 `_`。
+8. **gosec 雙重抑制**：改用 gosec **原生** `#nosec G101` 註解（`// #nosec G101 -- this is an environment variable name, not a credential.`）——gosec 本體原生支援，golangci-lint 的 gosec wrapper 也尊重它，兩套工具一次滿足；nolintlint 只驗證 `//nolint` 指令，`#nosec` 不受 `require-explanation`/`require-specific` 約束。Taskfile 缺 `security:gosec` 本機關卡屬基礎設施缺口，另開工作項補（見 §10.3.1 一次只做一件事）。
+9. **flaky 根因（讀 Go 1.26.8 `net/http` 原始碼確認）**：server 端偵測 client 斷線靠 `connReader.backgroundRead`，而它只在 request body 被讀到 EOF（`registerOnHitEOF` → `startBackgroundRead`）後才啟動；timeout 測試的 handler 只等 `r.Context().Done()`、從不讀 body，client 逾時斷線後 server **永遠偵測不到**，context 不會被取消。`httptest.Server.Close()` 只強制關 `StateIdle`/`StateNew` 連線、不碰 `StateActive`（handler 執行中），故 `ts.Close()` 永久阻塞。先前 3 次通過是 race：完整套件下 client 斷線早於 server 讀完 request，`readRequest` 直接失敗、handler 根本沒啟動。**修法**：handler 先 `io.Copy(io.Discard, r.Body)` 把 body 讀到 EOF（啟動 background read），再等 `ctx.Done()`——client 斷線時 `handleReadErrorLocked` → `cancelCtx`，handler 返回、`ts.Close()` 正常結束。修復後單獨跑 3 次全 PASS（0.07s/次）。
 
 ## 最後變動了什麼
 
 | 檔案 | 變更 |
 |---|---|
-| `cmd/my-cli/openai_chat.go` | 新增：`openai-chat-test` 子命令（flags 定義、key 解析、HTTP 請求、回應解析、table/json 輸出、錯誤處理含 key 遮蔽） |
-| `cmd/my-cli/openai_chat_test.go` | 新增：httptest 模擬端點的完整測試（成功/401/500/404/逾時/缺參數/json 輸出/key 不外洩/env fallback） |
+| `cmd/my-cli/openai_chat.go` | 新增：`openai-chat-test` 子命令（flags 定義、key 解析、HTTP 請求、回應解析、table/json 輸出、錯誤處理含 key 遮蔽）；`envAPIKey` 以原生 `#nosec G101` 抑制誤判 |
+| `cmd/my-cli/openai_chat_test.go` | 新增：httptest 模擬端點的完整測試（成功/401/500/404/逾時/缺參數/json 輸出/key 不外洩/env fallback）；timeout 測試 handler 先 drain request body 再等 `ctx.Done()`（修 flaky 卡死） |
 | `cmd/my-cli/root.go` | 註冊 `newOpenaiChatTestCmd()`（1 行） |
 | `cmd/my-cli/version_test.go` | `"json"` 字面值改用 `outputFormatJSON` 常數（goconst） |
 | `cmd/my-cli/main_test.go` | 同上（goconst） |
 | `specs/20260908-add-openai-chat-test.md` | 本紀錄 |
 
-Commit：`fe4d432`（feat: add openai-chat-test subcommand）
+Commit：`17410e2`（feat: add openai-chat-test subcommand）；fix commit（`#nosec G101` + timeout 測試 drain body 修 flaky）見 push 後 hash。
 
 ## 驗證結果
 
@@ -94,6 +98,11 @@ Commit：`fe4d432`（feat: add openai-chat-test subcommand）
 - `go build ./...`：通過（無輸出）
 - `go vet ./...`：通過（無輸出）
 - `go tool golangci-lint run`：**0 issues**
-- `go test -shuffle=on -count=1 ./...`：`ok github.com/cwchiu/my-cli/cmd/my-cli`（連跑 3 次不同 shuffle seed 全綠，無 flaky）
+- `go test -shuffle=on -count=1 ./...`：`ok github.com/cwchiu/my-cli/cmd/my-cli`（2 個不同 shuffle seed 全綠）
 
-測試明細（`-run TestOpenaiChatTest -v`）：13 個子測試全 PASS，含 key 不外洩（`[redacted]`）與逾時（50ms client timeout 正確觸發）案例。
+測試明細：13 個子測試全 PASS，含 key 不外洩（`[redacted]`）與逾時（50ms client timeout 正確觸發）案例。
+
+修復後補驗：
+
+- `go test -run 'TestOpenaiChatTestTimeout$' -count=3 -timeout 90s`：3 次全 PASS（0.07s/次；修復前單獨跑必現卡死 91s timeout panic）
+- lint 對 `#nosec G101` 註解：0 issues（golangci-lint 的 gosec 尊重原生 `#nosec`；nolintlint 不約束 `#nosec`）

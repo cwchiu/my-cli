@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -302,9 +303,13 @@ func TestOpenaiChatTestTimeout(t *testing.T) {
 	t.Parallel()
 
 	// A server that never answers: the client timeout must surface as an
-	// error instead of hanging the test. The handler blocks until the
-	// client disconnects, so no time.Sleep is needed.
+	// error instead of hanging the test. The handler first drains the
+	// request body to EOF, which arms the server's background read on the
+	// connection; only then can the server notice the client disconnect
+	// and cancel the request context the handler waits on. Without the
+	// drain, the context is never cancelled and ts.Close() hangs forever.
 	ts := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
 		<-r.Context().Done()
 	}))
 	t.Cleanup(ts.Close)
