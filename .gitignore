@@ -9,6 +9,9 @@ dist/
 *.out
 coverage.*
 
+# Security scan artifacts
+gosec-results.sarif
+
 # IDE
 .idea/
 .vscode/

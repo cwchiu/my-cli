@@ -68,11 +68,17 @@ tasks:
     cmds:
       - go run github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.5.1 scan --lockfile=go.mod
 
+  security:gosec:
+    desc: gosec SAST 掃描（與 CI 同版本 v2.29.0；SARIF 輸出至 gosec-results.sarif）
+    cmds:
+      - go run github.com/securego/gosec/v2/cmd/gosec@v2.29.0 -no-fail -fmt sarif -out gosec-results.sarif ./...
+
   security:all:
-    desc: 全部安全掃描（govulncheck + osv-scanner）
+    desc: 全部安全掃描（govulncheck + osv-scanner + gosec）
     cmds:
       - task: security:govulncheck
       - task: security:osv
+      - task: security:gosec
 
   release:check:
     desc: 驗證 .goreleaser.yaml（go run 臨時執行，不進 go.mod；與 CI 同版本 v2.18.1）
