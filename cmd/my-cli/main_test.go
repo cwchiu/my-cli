@@ -57,7 +57,7 @@ func TestRunExitCodes(t *testing.T) {
 	}{
 		{
 			name:       "success exits 0",
-			args:       []string{"my-cli", argVersion, "-o", "json"},
+			args:       []string{"my-cli", argVersion, "-o", outputFormatJSON},
 			wantCode:   exitCodeOK,
 			wantStdout: `"version": "dev"`,
 		},

@@ -53,7 +53,7 @@ func TestVersionCommand(t *testing.T) {
 		},
 		{
 			name: "json output",
-			args: []string{argVersion, "--output", "json"},
+			args: []string{argVersion, "--output", outputFormatJSON},
 			checkOut: func(t *testing.T, out string) {
 				t.Helper()
 
@@ -66,7 +66,7 @@ func TestVersionCommand(t *testing.T) {
 		},
 		{
 			name: "json output via shorthand",
-			args: []string{argVersion, "-o", "json"},
+			args: []string{argVersion, "-o", outputFormatJSON},
 			checkOut: func(t *testing.T, out string) {
 				t.Helper()
 
