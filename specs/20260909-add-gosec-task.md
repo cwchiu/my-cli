@@ -49,7 +49,8 @@ PR #4（openai-chat-test）在 CI 的獨立 gosec 掃描爆出 G101 alert #6，�
 | `CHANGELOG.md` | `Unreleased` → `[0.1.0] - 2026-09-09`；補 openai-chat-test 條目 |
 | `specs/20260909-add-gosec-task.md` | 本紀錄 |
 
-（commit hash 合併時補）
+Commit：`0c08f86`（feat: add security:gosec task and prepare v0.1.0 release）。
+Tag：`v0.1.0`（annotated）。Release run：`34256975453`（success）。
 
 ## 驗證結果
 
