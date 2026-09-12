@@ -97,7 +97,8 @@ func Fetch(ctx context.Context, target string, opts Options) (*Info, error) {
 			MinVersion: tls.VersionTLS12,
 			// When verification is on, Go fills PeerCertificates with the
 			// verified chain. When off, the raw peer chain is kept as-is.
-			InsecureSkipVerify: opts.Insecure, //nolint:gosec // opt-in via --insecure to inspect untrusted chains
+			// #nosec G402 -- opt-in via --insecure flag to inspect untrusted chains
+			InsecureSkipVerify: opts.Insecure,
 		},
 	}
 
