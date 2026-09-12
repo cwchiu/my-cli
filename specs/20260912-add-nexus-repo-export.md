@@ -73,6 +73,7 @@ specs/20260912-add-nexus-repo-export.md  # 本檔
 5. **usage error 分類**：測試期望 flag/env 驗證錯誤（缺 `--base-url`、非法 `--output`/`--type`）映射到 exit code 2（`errUsage`），但 (a) `resolveNexusConfig` 的錯誤未包 `errUsage`；(b) `MarkFlagRequired` 的錯誤發生在 `RunE` 之前，無法在命令內包裝。
 6. **lint 首跑 20 issues**：gofumpt 格式（5）、goconst 重複字面量（5）、gosec G304（1）、testifylint（8）、wsl_v5（1）。
 7. **`task` 不在 PATH**：`task security:all` 直接執行失敗（PowerShell 找不到 task 執行檔）。
+8. **CI data race（PR #8 "Test (Go stable)" 失敗）**：本地四關全綠，但 CI 的 `go test -race` 偵測到 `nexus_export_test.go:72` 的 DATA RACE——`TestNexusRepoExportCommand` 在父層共用一個 test server，5 個 `t.Parallel()` 子測試併發打同一個 server；httptest 每個請求在獨立 goroutine 處理，handler 內 `*gotAuth = append(*gotAuth, ...)` 對同一 slice 做 read-modify-write。本地測不出是因為本機無 gcc 跑不了 `-race`（AGENTS.md §5 約定）。race 錯誤計數是全域的，導致同時段執行的 `TestVersionCommand`、`TestOpenaiChatTestTimeout` 也被歸因失敗（實際只有一個根因）。
 
 ## 如何解決
 
@@ -83,6 +84,7 @@ specs/20260912-add-nexus-repo-export.md  # 本檔
 5. `resolveNexusConfig` 的回傳錯誤在 `RunE` 內以 `fmt.Errorf("%w: %w", errUsage, err)` 包裝；移除 `MarkFlagRequired("base-url")`，改由 `resolveNexusConfig` 統一驗證（錯誤訊息不變、可包裝、help 文字標注 required）。
 6. `go tool golangci-lint fmt` 自動修 gofumpt；重複字面量抽常數（`argNexusExport`、`argFlagBaseURL`、`argFlagOutput`、`sectionStorage`）；`os.ReadFile` 加 `// #nosec G304 -- path comes from t.TempDir()`；wsl_v5 補空行。
 7. go.mod 的 `tool` directive 已含 task：改用 `go tool task security:all`。
+8. 新增 `authRecorder`（`sync.Mutex` 保護的 recorder，`record`/`snapshot` 方法）取代裸 slice append；httptest handler goroutine 併發寫入必須加鎖。`internal/nexus` 的測試 server 為每子測試各自建立、單請求後才讀取（HTTP round-trip happens-before 已同步），無需修改。
 
 ## 最後變動了什麼
 
@@ -107,6 +109,7 @@ specs/20260912-add-nexus-repo-export.md  # 本檔
 - `go tool golangci-lint run`：**0 issues**。
 - `go test -shuffle=on ./...`：`ok cmd/my-cli`、`ok internal/falconcis`、`ok internal/nexus` 全綠。
 - `go tool task security:all`：govulncheck "No vulnerabilities found"；osv-scanner "0 packages affected by 0 known vulnerabilities"；gosec SARIF 產出無阻擋。
+- **CI（PR #8）**：首輪 "Test (Go stable)" 因 data race 失敗（見遭遇的困難 #8）；修復後重跑四關全綠，push 後 `gh pr checks` 全數通過。
 
 ### 可重建性驗證（Phase 5 #13，強制）
 - 對真實 Nexus 跑 `--output json`，逐項比對 Nexus UI 各 repo 全部設定（routing rule、docker httpPort、maven versionPolicy/layoutPolicy、cleanup、blob store 等）。

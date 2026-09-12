@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -43,17 +44,39 @@ const nexusTestServerPayload = `[
   }
 ]`
 
+// authRecorder records Authorization headers from concurrent HTTP handler
+// goroutines. httptest serves each request on its own goroutine, so the
+// append must be mutex-guarded (CI runs tests with -race).
+type authRecorder struct {
+	mu      sync.Mutex
+	headers []string
+}
+
+func (a *authRecorder) record(header string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.headers = append(a.headers, header)
+}
+
+func (a *authRecorder) snapshot() []string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	return append([]string(nil), a.headers...)
+}
+
 // startNexusTestServer starts an httptest server serving a fixed repositories
 // payload, recording the Authorization header of each request.
-func startNexusTestServer(t *testing.T, status int, body string) (string, *[]string) {
+func startNexusTestServer(t *testing.T, status int, body string) (string, *authRecorder) {
 	t.Helper()
 
-	var gotAuth []string
+	gotAuth := &authRecorder{}
 
-	ts := newNexusTestHandler(status, body, &gotAuth)
+	ts := newNexusTestHandler(status, body, gotAuth)
 	t.Cleanup(ts.Close)
 
-	return ts.URL, &gotAuth
+	return ts.URL, gotAuth
 }
 
 // newNexusTestHandler builds the httptest server backing startNexusTestServer.
@@ -67,9 +90,9 @@ const (
 	argFlagOutput  = "--output"
 )
 
-func newNexusTestHandler(status int, body string, gotAuth *[]string) *httptest.Server {
+func newNexusTestHandler(status int, body string, gotAuth *authRecorder) *httptest.Server {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		*gotAuth = append(*gotAuth, r.Header.Get("Authorization"))
+		gotAuth.record(r.Header.Get("Authorization"))
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
@@ -265,6 +288,7 @@ func TestNexusRepoExportBasicAuthFromEnv(t *testing.T) {
 	_, err := executeCommand(t, argNexusExport, argFlagBaseURL, baseURL)
 	require.NoError(t, err)
 
-	assert.Len(*gotAuth, 1)
-	assert.True(strings.HasPrefix((*gotAuth)[0], "Basic "))
+	headers := gotAuth.snapshot()
+	assert.Len(headers, 1)
+	assert.True(strings.HasPrefix(headers[0], "Basic "))
 }
