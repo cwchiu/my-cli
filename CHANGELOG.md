@@ -5,6 +5,20 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `nexus-repo-export` subcommand: export repository settings from a Sonatype
+  Nexus Repository 3 server (`GET /service/rest/v1/repositories`).
+- Lossless JSON output (`json.RawMessage`, untouched API response) detailed
+  enough to rebuild the exported repositories.
+- Flat 24-column CSV export of common repository settings (storage, proxy,
+  httpclient, negative/positive cache, cleanup), sorted by name.
+- Basic auth via `--username` / `NEXUS_USERNAME` and `NEXUS_PASSWORD`
+  environment variable (password is never a flag); anonymous access supported.
+- Client-side `--format` and `--type` (hosted/proxy/group) filters.
+
 ## [0.2.0] - 2026-09-12
 
 ### Added

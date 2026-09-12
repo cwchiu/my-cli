@@ -63,9 +63,12 @@ $ my-cli version -o json
 
 ## Commands
 
-| Command   | Description                                  |
-| --------- | -------------------------------------------- |
-| `version` | Print version, commit, and build date.       |
+| Command              | Description                                                        |
+| -------------------- | ------------------------------------------------------------------ |
+| `version`            | Print version, commit, and build date.                             |
+| `openai-chat-test`   | Smoke-test OpenAI-compatible chat APIs.                            |
+| `falcon-cis-export`  | Export CrowdStrike Falcon container CIS violations (CSV/JSON).     |
+| `nexus-repo-export`  | Export Sonatype Nexus Repository 3 repository settings (CSV/JSON). |
 
 Global flags:
 
@@ -75,6 +78,43 @@ Global flags:
 | `-h, --help`   | Show help for any command.                                          |
 
 `version` accepts `--output, -o table|json` (default `table`) for machine-readable output.
+
+### nexus-repo-export
+
+Exports repository settings from a Sonatype Nexus Repository 3 server via
+`GET /service/rest/v1/repositories`.
+
+```console
+$ my-cli nexus-repo-export --base-url https://nexus.example.com
+$ my-cli nexus-repo-export --base-url https://nexus.example.com --output csv -O repos.csv
+$ my-cli nexus-repo-export --base-url https://nexus.example.com --format docker --type proxy
+```
+
+| Flag             | Description                                                              |
+| ---------------- | ------------------------------------------------------------------------ |
+| `--base-url`     | Nexus server base URL (**required**; falls back to `NEXUS_BASE_URL`).    |
+| `--username`     | Nexus user for Basic auth (falls back to `NEXUS_USERNAME`).              |
+| `--format`       | Only export repositories with this format (e.g. `maven`, `npm`, `docker`). |
+| `--type`         | Only export repositories with this type (`hosted\|proxy\|group`).        |
+| `--timeout`      | Total run timeout (default `2m`).                                        |
+| `--output, -o`   | Output format: `table\|json\|csv` (default `table`).                     |
+| `--out, -O`      | Write the output to this file instead of stdout.                         |
+
+Credentials: the password is read from the `NEXUS_PASSWORD` environment
+variable **only** (never a flag, so it cannot leak via shell history or
+process listings). Anonymous access is used when no username is configured.
+
+Output formats:
+
+- `table` — human-readable summary (`NAME`, `FORMAT`, `TYPE`, `URL`).
+- `json` — the **untouched API response**, preserving every field (including
+  format-specific attributes such as `docker.httpPort` or maven policies), so
+  the export is detailed enough to rebuild the repositories.
+- `csv` — a flat 24-column table of the common settings (storage, proxy,
+  httpclient, negative/positive cache, cleanup), sorted by name for stable
+  diffs. Fields a repository does not have are empty.
+
+Run `my-cli nexus-repo-export --help` for the full reference.
 
 ### Exit codes
 
