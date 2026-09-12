@@ -70,6 +70,7 @@ $ my-cli version -o json
 | `falcon-cis-export`  | Export CrowdStrike Falcon container CIS violations (CSV/JSON).     |
 | `nexus-repo-export`  | Export Sonatype Nexus Repository 3 repository settings (CSV/JSON). |
 | `ip-lookup`          | Look up external IP information via ipinfo.io.                     |
+| `cert-info`          | Show the TLS certificate chain served by a host.                   |
 
 Global flags:
 
@@ -146,6 +147,37 @@ Output formats:
 - `json` — the **untouched API response**, preserving every field.
 
 Run `my-cli ip-lookup --help` for the full reference.
+
+### cert-info
+
+Connects to `host[:port]` over TLS (default port 443), performs a handshake,
+and prints the served certificate chain in human-readable form — like
+`openssl s_client`, but summarized: subject, issuer, validity window, SANs,
+signature and key algorithms, SHA-256 fingerprint, and the negotiated TLS
+version and cipher. Certificates that are expired or expiring within 30 days
+are flagged.
+
+```console
+$ my-cli cert-info example.com
+$ my-cli cert-info example.com:8443
+$ my-cli cert-info internal.example.com --insecure
+$ my-cli cert-info example.com --output json
+```
+
+| Flag           | Description                                                              |
+| -------------- | ------------------------------------------------------------------------ |
+| `--insecure`   | Skip certificate verification (for self-signed or internal CA chains).   |
+| `--timeout`    | Connect and handshake timeout (default `10s`).                           |
+| `--output, -o` | Output format: `table\|json` (default `table`).                          |
+| `--out, -O`    | Write the output to this file instead of stdout.                         |
+
+Output formats:
+
+- `table` — human-readable summary of the connection and each certificate in
+  the chain (leaf first), including an expiry warning when applicable.
+- `json` — machine-readable certificate details for scripting.
+
+Run `my-cli cert-info --help` for the full reference.
 
 ### Exit codes
 
