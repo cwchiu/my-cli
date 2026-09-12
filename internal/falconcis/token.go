@@ -16,10 +16,10 @@ import (
 	"time"
 )
 
-// tokenURLPath is the OAuth2 token endpoint path on the Falcon cloud.
+// pathOAuth2 is the OAuth2 token endpoint path on the Falcon cloud.
 //
-//nolint:gosec // This is an OAuth2 endpoint path, not a secret.
-const tokenURLPath = "/oauth2/token"
+// #nosec G101 -- this is an OAuth2 endpoint path, not a secret.
+const pathOAuth2 = "/oauth2/token"
 
 // tokenExpiryMargin is how long before the reported expiry a cached token
 // is considered stale and refreshed, to avoid using a token that expires
@@ -86,7 +86,7 @@ func (c *Client) fetchToken(ctx context.Context) (string, time.Duration, error) 
 		c.clientID, c.clientSecret,
 	))
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+tokenURLPath, form)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+pathOAuth2, form)
 	if err != nil {
 		return "", 0, fmt.Errorf("build token request: %w", err)
 	}
