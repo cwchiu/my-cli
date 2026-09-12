@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (Ctrl-C/SIGTERM), with graceful shutdown, structured request logging to
   stderr, and `--listen` / `--port` / `--folder` flags (env fallbacks via
   `MYCLI_HTTP_STATIC_SERVER_*`). Binds to `127.0.0.1` by default.
+- `cert-info` subcommand: connect to `host[:port]` over TLS and print the served
+  certificate chain in human-readable form (subject, issuer, validity window,
+  SANs, signature/key algorithms, SHA-256 fingerprint, negotiated TLS version
+  and cipher), with expiry warnings and `--output table|json` support.
 - `nexus-repo-export` subcommand: export repository settings from a Sonatype
   Nexus Repository 3 server (`GET /service/rest/v1/repositories`).
 - Lossless JSON output (`json.RawMessage`, untouched API response) detailed

@@ -71,6 +71,7 @@ $ my-cli version -o json
 | `nexus-repo-export`  | Export Sonatype Nexus Repository 3 repository settings (CSV/JSON). |
 | `ip-lookup`          | Look up external IP information via ipinfo.io.                     |
 | `http-static-server` | Serve a folder over HTTP until interrupted.                        |
+| `cert-info`          | Show the TLS certificate chain served by a host.                   |
 
 Global flags:
 
@@ -148,6 +149,7 @@ Output formats:
 
 Run `my-cli ip-lookup --help` for the full reference.
 
+<<<<<<< HEAD
 ### http-static-server
 
 Serves a folder over HTTP with the standard library file server until
@@ -174,6 +176,38 @@ a listing; path traversal outside the folder is rejected by the standard file
 server.
 
 Run `my-cli http-static-server --help` for the full reference.
+=======
+### cert-info
+
+Connects to `host[:port]` over TLS (default port 443), performs a handshake,
+and prints the served certificate chain in human-readable form — like
+`openssl s_client`, but summarized: subject, issuer, validity window, SANs,
+signature and key algorithms, SHA-256 fingerprint, and the negotiated TLS
+version and cipher. Certificates that are expired or expiring within 30 days
+are flagged.
+
+```console
+$ my-cli cert-info example.com
+$ my-cli cert-info example.com:8443
+$ my-cli cert-info internal.example.com --insecure
+$ my-cli cert-info example.com --output json
+```
+
+| Flag           | Description                                                              |
+| -------------- | ------------------------------------------------------------------------ |
+| `--insecure`   | Skip certificate verification (for self-signed or internal CA chains).   |
+| `--timeout`    | Connect and handshake timeout (default `10s`).                           |
+| `--output, -o` | Output format: `table\|json` (default `table`).                          |
+| `--out, -O`    | Write the output to this file instead of stdout.                         |
+
+Output formats:
+
+- `table` — human-readable summary of the connection and each certificate in
+  the chain (leaf first), including an expiry warning when applicable.
+- `json` — machine-readable certificate details for scripting.
+
+Run `my-cli cert-info --help` for the full reference.
+>>>>>>> c2c5370 (feat: add cert-info command for TLS certificate inspection)
 
 ### Exit codes
 

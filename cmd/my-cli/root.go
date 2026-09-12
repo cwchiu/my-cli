@@ -53,6 +53,7 @@ Run "my-cli <command> --help" for details on a specific command.`,
 	rootCmd.AddCommand(newNexusExportCmd())
 	rootCmd.AddCommand(newIPLookupCmd())
 	rootCmd.AddCommand(newHTTPStaticServerCmd())
+	rootCmd.AddCommand(newCertInfoCmd())
 
 	return rootCmd
 }
