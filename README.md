@@ -70,6 +70,7 @@ $ my-cli version -o json
 | `falcon-cis-export`  | Export CrowdStrike Falcon container CIS violations (CSV/JSON).     |
 | `nexus-repo-export`  | Export Sonatype Nexus Repository 3 repository settings (CSV/JSON). |
 | `ip-lookup`          | Look up external IP information via ipinfo.io.                     |
+| `http-static-server` | Serve a folder over HTTP until interrupted.                        |
 
 Global flags:
 
@@ -146,6 +147,33 @@ Output formats:
 - `json` — the **untouched API response**, preserving every field.
 
 Run `my-cli ip-lookup --help` for the full reference.
+
+### http-static-server
+
+Serves a folder over HTTP with the standard library file server until
+interrupted (Ctrl-C or SIGTERM), then drains in-flight requests before
+exiting. Requests are logged to stderr in a structured format; nothing is
+written to stdout.
+
+```console
+$ my-cli http-static-server --folder ./report
+$ my-cli http-static-server --folder ./report --listen 0.0.0.0 --port 9000
+$ MYCLI_HTTP_STATIC_SERVER_FOLDER=./report my-cli http-static-server
+```
+
+| Flag       | Description                                                                        |
+| ---------- | ---------------------------------------------------------------------------------- |
+| `--listen` | IP address to bind (default `127.0.0.1`; falls back to `MYCLI_HTTP_STATIC_SERVER_LISTEN`). |
+| `--port`   | TCP port to bind, `0` picks a free port (default `8080`; falls back to `MYCLI_HTTP_STATIC_SERVER_PORT`). |
+| `--folder` | Folder to serve (**required**; falls back to `MYCLI_HTTP_STATIC_SERVER_FOLDER`).   |
+
+Security: the server binds to `127.0.0.1` only by default, so the folder is
+reachable from the local machine alone. Pass `--listen 0.0.0.0` to expose it
+to the network. Directory requests serve `index.html` when present, otherwise
+a listing; path traversal outside the folder is rejected by the standard file
+server.
+
+Run `my-cli http-static-server --help` for the full reference.
 
 ### Exit codes
 
