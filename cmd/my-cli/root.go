@@ -50,6 +50,7 @@ Run "my-cli <command> --help" for details on a specific command.`,
 	rootCmd.AddCommand(newVersionCmd())
 	rootCmd.AddCommand(newOpenaiChatTestCmd())
 	rootCmd.AddCommand(newFalconCisExportCmd())
+	rootCmd.AddCommand(newNexusExportCmd())
 
 	return rootCmd
 }
