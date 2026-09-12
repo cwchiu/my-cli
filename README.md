@@ -69,6 +69,7 @@ $ my-cli version -o json
 | `openai-chat-test`   | Smoke-test OpenAI-compatible chat APIs.                            |
 | `falcon-cis-export`  | Export CrowdStrike Falcon container CIS violations (CSV/JSON).     |
 | `nexus-repo-export`  | Export Sonatype Nexus Repository 3 repository settings (CSV/JSON). |
+| `ip-lookup`          | Look up external IP information via ipinfo.io.                     |
 
 Global flags:
 
@@ -115,6 +116,36 @@ Output formats:
   diffs. Fields a repository does not have are empty.
 
 Run `my-cli nexus-repo-export --help` for the full reference.
+
+### ip-lookup
+
+Looks up external IP information via [ipinfo.io](https://ipinfo.io). Without
+arguments the calling host's own external IP is reported; with one argument
+that IPv4 or IPv6 address is looked up instead.
+
+```console
+$ my-cli ip-lookup
+$ my-cli ip-lookup 8.8.8.8
+$ my-cli ip-lookup 2001:4860:4860::8888 --output json
+```
+
+| Flag           | Description                                          |
+| -------------- | ---------------------------------------------------- |
+| `--base-url`   | ipinfo.io base URL (default `https://ipinfo.io`).    |
+| `--timeout`    | Request timeout (default `30s`).                     |
+| `--output, -o` | Output format: `table\|json` (default `table`).      |
+
+No API token is required: the ipinfo.io `/json` endpoint allows free
+anonymous access, which is rate limited per day (exceeding it returns 429).
+
+Output formats:
+
+- `table` — human-readable key-value summary (`ip`, `hostname`, `city`,
+  `region`, `country`, `loc`, `org`, `postal`, `timezone`); fields the API
+  omitted are skipped.
+- `json` — the **untouched API response**, preserving every field.
+
+Run `my-cli ip-lookup --help` for the full reference.
 
 ### Exit codes
 

@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Basic auth via `--username` / `NEXUS_USERNAME` and `NEXUS_PASSWORD`
   environment variable (password is never a flag); anonymous access supported.
 - Client-side `--format` and `--type` (hosted/proxy/group) filters.
+- `ip-lookup` subcommand: look up external IP information via ipinfo.io
+  (`GET /json`, no API token required) for the calling host or a given
+  IPv4/IPv6 address, with `table`/`json` output.
 
 ## [0.2.0] - 2026-09-12
 
