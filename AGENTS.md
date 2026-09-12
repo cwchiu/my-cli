@@ -111,6 +111,7 @@ my-cli/
 - **stdout 放資料、stderr 放日誌與錯誤**——管線友善是硬需求。
 - Exit codes：`0` 成功；`1` 一般錯誤；`2` 使用方式錯誤（flag/args）；必要時採用 sysexits（64–78）；被訊號終止為 `128+N`。
 - 支援 `--output table|json`（或 `json|yaml`）機器可讀輸出。
+- **外部 API 整合與資料匯出**：實作任何匯出或對接外部 API 前，一律以使用者提供之真實 Web export 檔案或真實 API 回應為唯一 Source of Truth，比對 Header 命名、欄位數量、資料筆數與排序。詳細規範參見 [docs/api-integration-guidelines.md](docs/api-integration-guidelines.md)。
 - 版本注入：`version.go` 宣告 `var version = "dev"`，建置時以 `-ldflags "-X main.version=..."` 注入；提供 `version` 子命令。
 - 訊號處理：`signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)`，確保清理路徑執行。
 - `--help` 是主要文件：每個命令的 `Short` / `Long` / `Example` 必須完整。
@@ -159,6 +160,7 @@ my-cli/
 - 子程序：`exec.Command(name, args...)` 分開傳參，**禁止** `bash -c` 字串拼接。
 - Token/亂數用 `crypto/rand`；秘密比較用 `crypto/subtle.ConstantTimeCompare`；密碼用 Argon2id/bcrypt；對稱加密用 AES-GCM。
 - 禁止硬編碼秘密；從 env / 設定檔讀取。
+- 憑證命名安全（防 gosec G101 假陽性）：非憑證字串（如 URL 路徑、端點名稱、設定 key）嚴禁以 `token`、`secret`、`password`、`key` 命名；若語意必須含有，必須在常數上一行明確加上 `// #nosec G101 -- 理由`，避免 CI SAST 阻擋。
 - 路徑處理防 traversal：Go 1.24+ 用 `os.Root`，否則 `filepath.IsLocal` + `filepath.Rel`。
 - 在信任邊界驗證所有輸入；給使用者的錯誤訊息保持通用，細節進 log。
 - 每次發布前跑 `govulncheck`。
@@ -210,7 +212,8 @@ my-cli/
 - 例行升級用 `go get -u=patch`；重大升級逐一處理。
 - Go 1.24+ 開發工具用 go.mod 的 `tool` directive（`go get -tool <cmd>`、`go tool <name>`），不用 tools.go。
 - 鎖定版本前先查 pkg.go.dev 確認維護狀態與授權。
-- 每次發布前：`govulncheck ./...`。
+- 每次提交與發布前：執行依賴安全掃描（`govulncheck ./...` 與 `osv-scanner scan --lockfile=go.mod`，或 `task security:all`）。
+- 間接依賴漏洞修復：若 indirect 依賴被掃描出已知 CVE（如 osv-scanner 警報），主動使用 `go get <pkg>@<fixed-version>` 明確鎖定安全版本並 `go mod tidy`。
 
 ---
 
@@ -237,6 +240,7 @@ GitHub Actions 階段順序：**test → lint → security（SAST + SCA + Secret
 - release：GoReleaser（CLI 發布標配，見後續工作項）
 - Dependabot 自動更新（gomod + github-actions，見 `.github/dependabot.yml`）；workflow 設最小權限 `permissions:`。
 - **Action pin 查證（強制）**：pin 任何 GitHub Action 前，一律以 GitHub API（`GET /repos/<owner>/<repo>/tags`）驗證 tag 存在。並非所有 repo 發布 floating major tag——例如 `securego/gosec`、`google/osv-scanner-action` 只有確切 semver tag。無 major tag 的 repo 釘確切 semver，依賴 Dependabot（github-actions ecosystem）更新（fix-ci-action-tags 實例：`@v2` 不存在，Actions 報 "Unable to resolve action"）。
+- **PR 提交後追蹤（強制）**：建立 PR 或 push 分支後，必須執行 `gh pr checks <PR>` 追蹤直至所有 checks（SAST, SCA, Tests, Lint, Secrets）全數通過，不得發完 PR 即離線。若有 check 失敗，立即由 logs 分析根因並修復。
 
 ---
 
@@ -297,6 +301,7 @@ GitHub Actions 階段順序：**test → lint → security（SAST + SCA + Secret
 3. **每步驗證（不破壞原有功能的閘門）**：每次編輯後立即以 **build → vet → lint → test** 四關驗證（本機：`go build ./...`、`go vet ./...`、`go tool golangci-lint run`、`go test -shuffle=on ./...`），**四關全過才進下一步**。教訓：修 lint 時曾引入 `undefined: cmd` 編譯錯誤（add-lint-config 工作項實例）——任何「順手的小修」都可能破壞功能，必須當場驗證。行為變更前先確認既有測試全綠；新增行為先補測試。
    - **編輯後回讀（強制）**：工具回傳成功 ≠ 變更落點正確。每次 `replace_string_in_file` / `insert_edit_into_file` 後，立即 `read_file` 回讀變更區域確認內容與位置正確（fix-security-yaml 實例：編輯成功套用到錯誤位置，造成 invalid YAML）。
    - **YAML 第五關（強制，僅 YAML/設定檔變更）**：改動任何 `.yml`/`.yaml`（含 `.github/**`）後，必須以 parser 驗證可解析，不得只靠肉眼檢查：`uv run --with pyyaml python -c "import yaml,glob; [yaml.safe_load(open(f,encoding='utf-8')) for f in glob.glob('.github/**/*.yml',recursive=True)]; print('YAML OK')"`（fix-security-yaml 實例：invalid YAML 到 Actions 才爆）。
+   - **安全第 4.5 關（強制，提交 PR 前）**：提交 PR 前執行本地安全掃描 `task security:all`（或 `govulncheck ./...` 與 `osv-scanner scan --lockfile=go.mod`），確保無已知依賴漏洞阻擋 CI。
 4. **先說明再動手**：變更前簡述要做什麼、為什麼；重大變更（跨套件搬移、exported API 變更、刪除）先取得使用者同意。
 5. **重構與行為變更分離**：絕不混合結構性與行為性變更。
 6. **風險分級**：Low（改名/抽變數）→ build+vet+test 即可；Medium（抽函式）→ 加目標測試；High（簽名變更/搬套件）→ 完整安全網 + 人工 checkpoint。
@@ -333,6 +338,13 @@ GitHub Actions 階段順序：**test → lint → security（SAST + SCA + Secret
 | 合併後直接清理收工 | 合併後在 main 重跑 lint/test/build 全綠才算完成 |
 | 一個 PR 混雜重構+新功能 | 分開、各 100–500 行 |
 | 憑直覺最佳化 | 先 profile，benchstat 對比 |
+| `tokenURLPath = "/..."` 等命名 | 改用 `path...`、`endpoint...` 並補 `// #nosec G101 -- 理由` |
+| 憑空推導外部 API 與匯出 CSV 格式 | 以真實 Web Export 為 Source of Truth（參見 [docs/api-integration-guidelines.md](docs/api-integration-guidelines.md)） |
+| API 百分比/比例宣告為 int | 一律宣告為 `float64`，避免反序列化崩潰 |
+| 提交 PR 前未檢查 SCA 漏洞 | 提交前跑 `task security:all` 查驗 |
+| PR 建立後即斷線 | 追蹤 `gh pr checks <PR>` 直到全綠 |
+
+> 完整歷史事故細節、根本原因與復線經驗請參閱 [docs/pitfalls-and-lessons.md](docs/pitfalls-and-lessons.md)。
 
 ---
 
