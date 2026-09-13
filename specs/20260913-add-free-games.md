@@ -1,7 +1,7 @@
 # specs/20260913-add-free-games.md
 
 > 工作項：新增 `free-games` 子命令——收集限時免費遊戲（GamerPower API，GitHub issue #11）。
-> 狀態：完成（待 PR 合併）。
+> 狀態：✅ 完成（PR #16 已於 2026-09-13 10:56 UTC 合併）。
 
 ## Why
 
@@ -100,8 +100,68 @@ Steam / Epic / Android 平台目前的限時免費遊戲，包含遊戲名稱、
 10. **pwsh 批次取代後殘留重複宣告**：用 `-replace` 批次改名 helper 時，
     兩個檔案各自留下同名 `startJSONTestServer` 定義（vet 報 redeclared），
     刪除 free_games_test.go 的重複定義與未用的 `httptest` import 解決。
+11. **CI data race 檢測失敗**（PR 推送後 CI Test (Go stable) 階段）：
+    startJSONTestServer 的 handler 在並發 HTTP 請求中直接修改 `*paths` 切片，
+    無任何同步機制（無 mutex、無 WaitGroup）。Go race detector（Go stable = 1.27.1，
+    啟用 `-race`）檢測到 6 個測試觸發此競賽狀況
+    （TestFreeGamesCommand ×3 subtests、TestFreeGamesErrorHandling、TestOpenaiChatTestTimeout、
+    TestHTTPStaticServerServesFiles），都報 "race detected during execution"。
+    根本原因：未同步的並發讀寫。修復方案見 §11。
+12. **goconst 在 rebase 後重新觸發**：rebase 整合來自其他 sessions 的新檔案
+    （http_static_server_test.go），該檔案也使用了 `"extra"` 字面值作測試用論據，
+    導致全workspace 的該字面值達 4 次，超過 threshold 3。修復方案：定義共用常數
+    `const argExtra = "extra"` 在 ip_lookup_test.go，跨檔案用 `argExtra` 代替字面值。
 
 ### 如何解決
+
+**問題 11 的修復（CI data race）**：
+- 採用 main 分支 PR #17 的 `startIPInfoTestServer` 實作——該實作已包含完整的競賽修復邏輯：
+  ```go
+  func startIPInfoTestServer(t *testing.T, status int, body string) (string, func(), *[]string) {
+      t.Helper()
+      var (
+          mu sync.Mutex
+          wg sync.WaitGroup
+      )
+      paths := &[]string{}
+      ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+          wg.Add(1)
+          defer wg.Done()
+          mu.Lock()
+          *paths = append(*paths, r.URL.Path)
+          mu.Unlock()
+          w.Header().Set("Content-Type", "application/json")
+          w.WriteHeader(status)
+          _, _ = w.Write([]byte(body))
+      }))
+      t.Cleanup(ts.Close)
+      return ts.URL, wg.Wait, paths
+  }
+  ```
+  - `sync.Mutex` 保護 *paths 的修改
+  - `sync.WaitGroup` 追蹤所有 handler goroutine 的完成
+  - 返回 `wg.Wait` 函式，讓測試在斷言前調用 `wait()` 阻塞直到所有請求完成
+  - 文檔：「The returned wait function blocks until all in-flight handler goroutines have finished」
+- 重命名：`startJSONTestServer` → `startIPInfoTestServer`（統一名稱，易於理解其作用）
+- Rebase 時採用 main 的實作：`git checkout --theirs cmd/my-cli/ip_lookup_test.go`，
+  改掉 free_games_test.go 的所有呼叫。
+
+**問題 12 的修復（goconst refire）**：
+- ip_lookup_test.go 中定義 `const argExtra = "extra"`
+- http_static_server_test.go、openai_chat_test.go、version_test.go、
+  free_games_test.go 中的所有 `"extra"` 字面值改為 `argExtra`
+- 驗證：`go tool golangci-lint run` 無 goconst 警告
+
+其餘問題由四關（build → vet → lint → test）當場抓出、當場修：
+  簽名錯誤由 build、redeclared/unused import 由 vet、
+  dupl/funlen/testifylint/wsl_v5/gofumpt 由 lint、
+  CSV/JSON 期望由 test 的實際輸出對照修正。
+- 時鐘依賴問題以「2099 永遠存活 / 2001 永遠過期」的 fixture 設計根治，
+  並在 payload 註解與 `executeCommand` 呼叫處說明設計意圖。
+- 工具層教訓：`multi_replace_string_in_file` 對大型 payload 連續失敗 3 次
+  （工具驗證錯誤），改用小型單次 `replace_string_in_file` 逐一套用即成功。
+
+### Rebase 與合併過程
 
 - 每個問題都由四關（build → vet → lint → test）當場抓出、當場修：
   簽名錯誤由 build、redeclared/unused import 由 vet、
@@ -112,6 +172,34 @@ Steam / Epic / Android 平台目前的限時免費遊戲，包含遊戲名稱、
 - 工具層教訓：`multi_replace_string_in_file` 對大型 payload 連續失敗 3 次
   （工具驗證錯誤），改用小型單次 `replace_string_in_file` 逐一套用即成功。
 
+### Rebase 與合併過程
+
+**時間線**：
+- **2026-09-13**（工作日）：實作完成 → commit c3eda64（original）→ PR #16 created
+- 同期間，其他 sessions 合併 PR #12（http-static-server）、PR #13（cert-info）、PR #17（ip-lookup race fix）
+  至 main，造成 PR #16 分支不斷與 main 發散。
+- 多次 rebase 於後續 check-in 中自動執行，以保持 PR 可合併（mergeable_state: clean）。
+
+**主要衝突**：
+- **Rebase #1 成功**（後續 check-in 中完成）：root.go 與 README.md 衝突已解決
+  （整合 http-static-server、cert-info、free-games 三個命令的順序與文檔）。
+- **Rebase #2 成功**（本 check-in）：origin/main 包含 PR #17（ip-lookup race fix），
+  其中 ip_lookup_test.go 定義了 `startIPInfoTestServer(t, status, body) → (url, wait(), paths)`
+  （含 WaitGroup + Mutex 同步邏輯）。我們的 PR 定義了 `startJSONTestServer`
+  （共用 helper，無同步）。解決方案：採用 main 的實作（含 race fix）；改掉
+  free_games_test.go 的所有呼叫從 `startJSONTestServer` → `startIPInfoTestServer`。
+  結果：乾淨 rebase，無剩餘衝突。
+
+**Post-merge 驗證**（AGENTS.md §10.1 第 7 條）：
+- 2026-09-13 10:56 UTC：PR #16 合併（squash merge；commit 8832ec6）
+- 主 repo 同步後四關驗證全綠：
+  - `go build ./...`：✓
+  - `go vet ./...`：✓
+  - `go tool golangci-lint run`：✓ 0 issues
+  - `go test -shuffle=on ./...`：✓（cmd/my-cli, certinfo, falconcis, nexus）
+- Worktree 清理：`git worktree remove ../my-cli-worktrees/add-free-games` ✓
+- 分支清理：`git branch -d feat/add-free-games` ✓
+
 ### 最後變動了什麼
 
 | 檔案 | 變更 |
@@ -119,10 +207,10 @@ Steam / Epic / Android 平台目前的限時免費遊戲，包含遊戲名稱、
 | `cmd/my-cli/free_games.go` | 新增：`free-games` 子命令（flags、config 解析、平台正規化、HTTP fetch、收集/排序、table/json/csv 渲染） |
 | `cmd/my-cli/root.go` | 註冊 `newFreeGamesCmd()` |
 | `cmd/my-cli/free_games_test.go` | 新增：命令層（table/platform/csv/json）、單一請求、錯誤分類、平台正規化、collector、comparator 測試；時鐘無關 fixture |
-| `cmd/my-cli/ip_lookup_test.go` | `startIPInfoTestServer` 改名共用 `startJSONTestServer`（消除 dupl） |
+| `cmd/my-cli/ip_lookup_test.go` | 採用 main 分支 PR #17 的 race 修復版 `startIPInfoTestServer`（含 WaitGroup + Mutex）；free_games_test.go 共用此 helper 替代定義（消除 dupl） |
 | `README.md` | Commands 表加入 `free-games`；新增專屬小節（flags 表、平台過濾說明、三種輸出格式） |
 | `CHANGELOG.md` | `[Unreleased]` Added 加入 `free-games` 條目 |
-| `specs/20260913-add-free-games.md` | 本檔 |
+| `specs/20260913-add-free-games.md` | 本檔（含工作內容、Source of Truth、技術選型、10+ 困難與解決方案、rebase 與合併記錄） |
 
 ### 驗證結果
 
