@@ -21,6 +21,7 @@ import (
 const (
 	argHTTPStaticServer = "http-static-server"
 	argFlagFolder       = "--folder"
+	argExtraPositional  = "extra"
 )
 
 // writeHTTPStaticFixture creates a temporary folder with one file and one

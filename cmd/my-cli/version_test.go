@@ -28,7 +28,10 @@ func executeCommand(t *testing.T, args ...string) (string, error) {
 
 // argVersion is the subcommand name used across tests; goconst flags the
 // repeated literal otherwise.
-const argVersion = "version"
+const (
+	argVersion      = "version"
+	argVersionExtra = "extra"
+)
 
 func TestVersionCommand(t *testing.T) {
 	t.Parallel()
@@ -97,7 +100,7 @@ func TestVersionCommandUsageErrors(t *testing.T) {
 		{
 			name:    "unexpected positional argument",
 			args:    []string{argVersion, argExtra},
-			wantMsg: "unknown command",
+			wantMsg: errUnknownCommand,
 		},
 		{
 			name:    "unknown flag",

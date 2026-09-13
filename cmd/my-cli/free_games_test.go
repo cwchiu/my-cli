@@ -283,7 +283,7 @@ func TestFreeGamesErrors(t *testing.T) {
 		{
 			name:    "positional args are rejected",
 			args:    []string{argFreeGames, argFlagBaseURL, okURL, argExtra},
-			wantErr: "unknown command",
+			wantErr: errUnknownCommand,
 			isUsage: false,
 		},
 		{

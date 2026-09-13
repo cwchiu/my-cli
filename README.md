@@ -73,6 +73,7 @@ $ my-cli version -o json
 | `http-static-server` | Serve a folder over HTTP until interrupted.                        |
 | `cert-info`          | Show the TLS certificate chain served by a host.                   |
 | `free-games`         | List limited-time free games (Steam/Epic/Android).                 |
+| `password-gen`       | Generate a cryptographically random password locally.               |
 
 Global flags:
 
@@ -242,6 +243,35 @@ Output formats:
 - `csv` — a flat table (`Title`, `Platforms`, `URL`, `Start`, `End`).
 
 Run `my-cli free-games --help` for the full reference.
+
+### password-gen
+
+Generates one local, cryptographically random password with configurable
+character classes and a minimum guaranteed appearance rule for every enabled
+class. This keeps the result usable for scripts, pipelines, and manual copy/paste
+while still being unpredictable.
+
+```console
+$ my-cli password-gen
+$ my-cli password-gen --length 32 --symbols
+$ my-cli password-gen --no-digits --no-upper --output json
+```
+
+| Flag           | Description                                                         |
+| -------------- | ------------------------------------------------------------------- |
+| `--length`     | Password length (default `16`; minimum is the number of enabled classes). |
+| `--no-digits`  | Exclude digits `0-9`.                                                |
+| `--no-upper`   | Exclude uppercase letters `A-Z`.                                     |
+| `--no-lower`   | Exclude lowercase letters `a-z`.                                     |
+| `--symbols`    | Include special symbols.                                            |
+| `--output, -o` | Output format: `table|json` (default `table`).                      |
+
+The generator guarantees that each enabled class appears at least once, then
+shuffles the combined password so the required characters are not predictable by
+position. The default result is a 16-character password containing digits,
+uppercase, and lowercase; `--symbols` adds the symbol set.
+
+Run `my-cli password-gen --help` for the full reference.
 
 ### Exit codes
 

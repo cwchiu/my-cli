@@ -18,8 +18,9 @@ const argOpenaiChatTest = "openai-chat-test"
 
 // flagBaseAPI and flagModel are repeated flag names in test tables.
 const (
-	flagBaseAPI = "--base-api"
-	flagModel   = "--model"
+	flagBaseAPI    = "--base-api"
+	flagModel      = "--model"
+	argOpenAIExtra = "extra"
 )
 
 // urlPlaceholder is substituted with the httptest server URL at runtime.
@@ -278,8 +279,8 @@ func TestOpenaiChatTestUsageErrors(t *testing.T) {
 		},
 		{
 			name:    "unexpected positional argument",
-			args:    []string{argOpenaiChatTest, flagBaseAPI, "http://localhost/v1", flagModel, "m", argExtra},
-			wantMsg: "unknown command",
+			args:    []string{argOpenaiChatTest, flagBaseAPI, "http://localhost/v1", flagModel, "m", argOpenAIExtra},
+			wantMsg: errUnknownCommand,
 		},
 		{
 			name:    "unsupported output format",
