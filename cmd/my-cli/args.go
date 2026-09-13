@@ -25,3 +25,7 @@ func wrapUsage(validate cobra.PositionalArgs) cobra.PositionalArgs {
 func markFlagErrors(_ *cobra.Command, err error) error {
 	return fmt.Errorf("%w: %w", errUsage, err)
 }
+
+// errUnknownCommand is the canonical Cobra positional-argument rejection
+// message used across command tests; goconst flags repeated literals.
+const errUnknownCommand = "unknown command"

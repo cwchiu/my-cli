@@ -279,12 +279,8 @@ func TestOpenaiChatTestUsageErrors(t *testing.T) {
 		},
 		{
 			name:    "unexpected positional argument",
-<<<<<<< HEAD
-			args:    []string{argOpenaiChatTest, flagBaseAPI, "http://localhost/v1", flagModel, "m", argExtra},
-=======
 			args:    []string{argOpenaiChatTest, flagBaseAPI, "http://localhost/v1", flagModel, "m", argOpenAIExtra},
->>>>>>> c6d7a3a (feat: add password-gen command)
-			wantMsg: "unknown command",
+			wantMsg: errUnknownCommand,
 		},
 		{
 			name:    "unsupported output format",

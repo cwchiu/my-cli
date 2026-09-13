@@ -244,7 +244,7 @@ func TestPasswordGenErrors(t *testing.T) {
 		{
 			name:    "positional arguments are rejected",
 			args:    []string{argPasswordGen, argPasswordExtra},
-			wantErr: "unknown command",
+			wantErr: errUnknownCommand,
 		},
 	}
 
