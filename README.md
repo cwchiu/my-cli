@@ -72,6 +72,7 @@ $ my-cli version -o json
 | `ip-lookup`          | Look up external IP information via ipinfo.io.                     |
 | `http-static-server` | Serve a folder over HTTP until interrupted.                        |
 | `cert-info`          | Show the TLS certificate chain served by a host.                   |
+| `free-games`         | List limited-time free games (Steam/Epic/Android).                 |
 
 Global flags:
 
@@ -149,7 +150,6 @@ Output formats:
 
 Run `my-cli ip-lookup --help` for the full reference.
 
-<<<<<<< HEAD
 ### http-static-server
 
 Serves a folder over HTTP with the standard library file server until
@@ -176,7 +176,7 @@ a listing; path traversal outside the folder is rejected by the standard file
 server.
 
 Run `my-cli http-static-server --help` for the full reference.
-=======
+
 ### cert-info
 
 Connects to `host[:port]` over TLS (default port 443), performs a handshake,
@@ -207,7 +207,41 @@ Output formats:
 - `json` — machine-readable certificate details for scripting.
 
 Run `my-cli cert-info --help` for the full reference.
->>>>>>> c2c5370 (feat: add cert-info command for TLS certificate inspection)
+
+### free-games
+
+Lists limited-time free games from the [GamerPower](https://www.gamerpower.com)
+public API (`GET /api/giveaways`), filtered to the Steam, Epic Games Store, and
+Android platforms. Expired giveaways and non-game entries (DLC, loot, beta) are
+dropped; results are sorted by end time ascending, with open-ended giveaways
+(`N/A` end date) last.
+
+```console
+$ my-cli free-games
+$ my-cli free-games --platform steam --platform epic
+$ my-cli free-games -p steam,epic --output csv -O free-games.csv
+```
+
+| Flag             | Description                                                        |
+| ---------------- | ------------------------------------------------------------------ |
+| `--base-url`     | GamerPower base URL (default `https://www.gamerpower.com`).        |
+| `-p, --platform` | Filter by platform: `steam`, `epic`, `android` (repeatable, comma-separated; default all). |
+| `--timeout`      | Total run timeout (default `30s`).                                 |
+| `--output, -o`   | Output format: `table\|json\|csv` (default `table`).               |
+| `--out, -O`      | Write the output to this file instead of stdout.                   |
+
+Platform matching is client-side substring matching against the API's
+comma-separated `platforms` field (the API's own platform query parameter is
+broken), so one request covers every selected platform.
+
+Output formats:
+
+- `table` — human-readable columns (`TITLE`, `PLATFORMS`, `START`, `END`, `URL`).
+- `json` — the **untouched API response** for the matching entries, preserving
+  every field.
+- `csv` — a flat table (`Title`, `Platforms`, `URL`, `Start`, `End`).
+
+Run `my-cli free-games --help` for the full reference.
 
 ### Exit codes
 

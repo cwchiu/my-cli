@@ -43,27 +43,28 @@ const (
 
 // startIPInfoTestServer starts an httptest server serving a fixed payload
 // with the given status, and records the request paths it received. The
-// returned server tracks in-flight requests via CloseClientConnections-free
-// means: callers must call the returned wait function after driving the
-// command and before reading paths, so handler goroutines have finished.
+// returned wait function blocks until all in-flight handler goroutines have
+// finished; callers must invoke it after driving the command and before
+// reading paths (the race detector flags unsynchronized reads of paths
+// otherwise). Shared by ip-lookup and free-games command tests.
 func startIPInfoTestServer(t *testing.T, status int, body string) (string, func(), *[]string) {
 	t.Helper()
 
-	var (
-		mu sync.Mutex
-		wg sync.WaitGroup
-	)
+	var mu sync.Mutex
 
 	paths := &[]string{}
+
+	var wg sync.WaitGroup
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		wg.Add(1)
 		defer wg.Done()
 
 		mu.Lock()
-		defer mu.Unlock()
 
 		*paths = append(*paths, r.URL.Path)
+
+		mu.Unlock()
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
