@@ -78,7 +78,7 @@ my-cli/
 └── .github/workflows/     # CI
 ```
 
-> **變更工作區**：所有開發在 git worktree（`../my-cli-worktrees/<topic>`）進行，主 repo 停在 `main` 只負責合併；流程見 §10。
+> **變更工作區**：所有開發在 git worktree（`../my-cli-worktrees/<topic>`）進行，主 repo 停在 `main` 只負責同步；需求必須先來自 GitHub Issue，完成後透過關聯 Issue 的 PR 合併；流程見 §10。
 
 ---
 
@@ -250,31 +250,38 @@ GitHub Actions 階段順序：**test → lint → security（SAST + SCA + Secret
 
 ### 10.1 Git worktree 工作流程（強制）
 
-> 使用者要求：**每次變動前先用 `git worktree` 建立獨立空間；確認功能符合需求後才合併回 `main`。**
+> 使用者要求：**GitHub Issue 是唯一需求來源；每次變動前先用 `git worktree` 建立獨立空間；完成後提交關聯 Issue 的 PR，經審核合併，再回收 worktree 並讓本地 `main` fast-forward 到最新遠端狀態。**
 
-1. **建立隔離工作區**：每次變更開始前，從最新 `main` 建立 worktree + branch：
+1. **Issue 先行**：開始任何變更前必須有 GitHub Issue，確認需求範圍、驗收條件與 Issue 編號。分支、spec 與 PR 都要保留該 Issue 編號；沒有 Issue 不得直接開發或提交 PR。
+2. **建立隔離工作區**：每次變更開始前，先同步 `main`，再從最新 `origin/main` 建立 worktree + branch：
    ```powershell
+   git checkout main
+   git pull --ff-only origin main
    git worktree add ../my-cli-worktrees/<topic> -b feat/<topic>
    ```
    - `<topic>` 用短連字號命名（如 `add-makefile`、`add-lint-config`）。
    - 主 repo 目錄保持在 `main`，**不在主 repo 直接改碼**。
-2. **在 worktree 內完成變更**：所有編輯、build、test、lint 都在 worktree 目錄執行。
-3. **驗證**：worktree 內跑 build / vet / test（本機 `go test -shuffle=on ./...`）全綠。
-4. **使用者確認**：向使用者展示變更摘要與驗證結果，**取得同意後**才合併。
-5. **合併回 main**：
+3. **在 worktree 內完成變更**：所有編輯、build、test、lint 都在 worktree 目錄執行；spec 須記錄來源 Issue。
+4. **驗證**：worktree 內跑 build / vet / test（本機 `go test -shuffle=on ./...`）全綠。
+5. **提交 PR**：PR description 必須包含 GitHub 自動關閉關鍵字，例如 `Closes #123` 或 `Fixes #123`，其中 `123` 必須是本次需求 Issue 編號。PR title、body 與 spec 要能對應同一個 Issue；未關聯 Issue 的 PR 不得合併。
    ```powershell
-   git -C ../my-cli-worktrees/<topic> add -A
-   git -C ../my-cli-worktrees/<topic> commit -m "<type>: <summary>"
+   gh pr create --base main --head feat/<topic> --title "<type>: <summary>" --body "Closes #<issue-number>"
+   ```
+6. **審核與合併**：等待 CI 全部通過並取得必要審核後，由 GitHub PR 合併到 `main`；不得以本地直接 merge 取代 PR 審核流程。確認 PR 狀態為 `MERGED`，且來源 Issue 已自動關閉。
+7. **回收 worktree 並同步 main**：PR 合併確認後，在主 repo 執行：
+   ```powershell
+   git fetch origin
    git checkout main
-   git merge --ff-only feat/<topic>   # 保持線性歷史；不行就先 rebase
+   git pull --ff-only origin main
    git worktree remove ../my-cli-worktrees/<topic>
    git branch -d feat/<topic>
+   git worktree prune
    ```
-6. **清理**：合併後立即移除 worktree 與分支；`git worktree list` 應只剩主 repo。
-7. **合併後驗證（強制）**：合併不是終點——**合併後必須在主 repo 重跑完整驗證**（`go tool golangci-lint run` 0 issues、`go test -shuffle=on ./...`、`go build ./...`），全綠才算工作項完成。教訓：ff merge 引入 `.gitattributes` 時 git 不會對既有檔案重新套用 attributes，合併後 main 上 lint 才爆（fix-eol 工作項實例）。若合併後驗證失敗，**先修復再清理 worktree**（必要時開新的 fix 工作項）。
-8. **終端 cwd 紀律（強制）**：每個終端命令執行前，確認 cwd 在預期的 worktree（`Set-Location` 後持續使用；或一律用 `git -C <path>` / `Set-Location` 明確指定）。教訓：cwd 漂移曾讓 `go get` / `go mod tidy` 在主 repo 執行，污染主 repo 的 `go.mod`/`go.sum`（add-taskfile 工作項實例）。若發現主 repo 出現非預期變更，立即 `git -C <主repo> checkout -- <檔案>` 還原。
-9. **git 診斷以可靠輸出為準**：本機環境（`core.autocrlf=true`）下，裸 `git diff` 對 EOL-only 變更顯示為空、pwsh 管線可能吞掉 git 輸出——診斷一律以 `git status --short` + `git ls-files --eol` + `git hash-object <file>`（比對 `git rev-parse HEAD:<file>`）為準，不依賴裸 `git diff` 的「無輸出」判斷「無變化」。
-10. **push 後遠端驗證（強制）**：涉及 `.github/` 的變更 push 後，必須確認遠端實際執行結果——Actions workflow 能解析、每個 action 能解析並執行、job 結果符合預期；Dependabot 設定生效（必要時手動觸發 "Update dependencies now"）。本機四關綠 ≠ 遠端綠（fix-security-yaml、fix-ci-action-tags 實例：invalid YAML 與幽靈 tag 都是推到遠端才爆）。
+8. **清理**：合併後立即移除 worktree 與本地分支；`git worktree list` 應只剩主 repo。若合併後驗證失敗，先保留 worktree，從新的 fix Issue 建立修復工作，不得刪除仍需追查的工作內容。
+9. **合併後驗證（強制）**：合併不是終點——**合併後必須在主 repo 重跑完整驗證**（`go tool golangci-lint run` 0 issues、`go test -shuffle=on ./...`、`go build ./...`），並確認 `git status --short --branch` 顯示 `main` 與 `origin/main` 同步，全部通過才算工作項完成。
+10. **終端 cwd 紀律（強制）**：每個終端命令執行前，確認 cwd 在預期的 worktree（`Set-Location` 後持續使用；或一律用 `git -C <path>` / `Set-Location` 明確指定）。教訓：cwd 漂移曾讓 `go get` / `go mod tidy` 在主 repo 執行，污染主 repo 的 `go.mod`/`go.sum`（add-taskfile 工作項實例）。若發現主 repo 出現非預期變更，立即 `git -C <主repo> checkout -- <檔案>` 還原。
+11. **git 診斷以可靠輸出為準**：本機環境（`core.autocrlf=true`）下，裸 `git diff` 對 EOL-only 變更顯示為空、pwsh 管線可能吞掉 git 輸出——診斷一律以 `git status --short` + `git ls-files --eol` + `git hash-object <file>`（比對 `git rev-parse HEAD:<file>`）為準，不依賴裸 `git diff` 的「無輸出」判斷「無變化」。
+12. **push 後遠端驗證（強制）**：涉及 `.github/` 的變更 push 後，必須確認遠端實際執行結果——Actions workflow 能解析、每個 action 能解析並執行、job 結果符合預期；Dependabot 設定生效（必要時手動觸發 "Update dependencies now"）。本機四關全綠 ≠ 遠端全綠（fix-security-yaml、fix-ci-action-tags 實例：invalid YAML 與幽靈 tag 都是推到遠端才爆）。
 
 ### 10.2 工作紀錄（specs/，強制）
 
