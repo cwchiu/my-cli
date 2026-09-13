@@ -99,7 +99,7 @@ const argExtra = "extra"
 func TestFreeGamesCommand(t *testing.T) {
 	t.Parallel()
 
-	baseURL, _ := startJSONTestServer(t, http.StatusOK, freeGamesTestPayload)
+	baseURL, _, _ := startIPInfoTestServer(t, http.StatusOK, freeGamesTestPayload)
 
 	tests := []struct {
 		name     string
@@ -231,10 +231,11 @@ func TestFreeGamesSingleRequest(t *testing.T) {
 
 	assert := assert.New(t)
 
-	baseURL, paths := startJSONTestServer(t, http.StatusOK, freeGamesTestPayload)
+	baseURL, wait, paths := startIPInfoTestServer(t, http.StatusOK, freeGamesTestPayload)
 
 	_, err := executeCommand(t, argFreeGames, argFlagBaseURL, baseURL)
 	require.NoError(t, err)
+	wait()
 
 	// One request covers every platform (the API's comma syntax is broken;
 	// filtering is client-side).
@@ -242,17 +243,18 @@ func TestFreeGamesSingleRequest(t *testing.T) {
 
 	_, err = executeCommand(t, argFreeGames, argFlagBaseURL, baseURL, argFlagPlatform, platformSteam)
 	require.NoError(t, err)
+	wait()
 	assert.Equal([]string{"/api/giveaways", "/api/giveaways"}, *paths)
 }
 
 func TestFreeGamesErrors(t *testing.T) {
 	t.Parallel()
 
-	okURL, _ := startJSONTestServer(t, http.StatusOK, freeGamesTestPayload)
-	notFoundURL, _ := startJSONTestServer(t, http.StatusNotFound, freeGamesErrorPayload)
-	plainURL, _ := startJSONTestServer(t, http.StatusInternalServerError, "boom")
-	badJSONURL, _ := startJSONTestServer(t, http.StatusOK, "{not json")
-	notArrayURL, _ := startJSONTestServer(t, http.StatusOK, `{"status":0}`)
+	okURL, _, _ := startIPInfoTestServer(t, http.StatusOK, freeGamesTestPayload)
+	notFoundURL, _, _ := startIPInfoTestServer(t, http.StatusNotFound, freeGamesErrorPayload)
+	plainURL, _, _ := startIPInfoTestServer(t, http.StatusInternalServerError, "boom")
+	badJSONURL, _, _ := startIPInfoTestServer(t, http.StatusOK, "{not json")
+	notArrayURL, _, _ := startIPInfoTestServer(t, http.StatusOK, `{"status":0}`)
 
 	tests := []struct {
 		name    string

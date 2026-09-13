@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -40,16 +41,30 @@ const (
 	wantBadFormat = "unsupported output format"
 )
 
-// startJSONTestServer starts an httptest server serving a fixed payload with
-// the given status, and records the request paths it received. Shared by the
-// ip-lookup and free-games command tests.
-func startJSONTestServer(t *testing.T, status int, body string) (string, *[]string) {
+// startIPInfoTestServer starts an httptest server serving a fixed payload
+// with the given status, and records the request paths it received. The
+// returned wait function blocks until all in-flight handler goroutines have
+// finished; callers must invoke it after driving the command and before
+// reading paths (the race detector flags unsynchronized reads of paths
+// otherwise). Shared by ip-lookup and free-games command tests.
+func startIPInfoTestServer(t *testing.T, status int, body string) (string, func(), *[]string) {
 	t.Helper()
+
+	var mu sync.Mutex
 
 	paths := &[]string{}
 
+	var wg sync.WaitGroup
+
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		wg.Add(1)
+		defer wg.Done()
+
+		mu.Lock()
+
 		*paths = append(*paths, r.URL.Path)
+
+		mu.Unlock()
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
@@ -57,13 +72,13 @@ func startJSONTestServer(t *testing.T, status int, body string) (string, *[]stri
 	}))
 	t.Cleanup(ts.Close)
 
-	return ts.URL, paths
+	return ts.URL, wg.Wait, paths
 }
 
 func TestIPLookupCommand(t *testing.T) {
 	t.Parallel()
 
-	baseURL, _ := startJSONTestServer(t, http.StatusOK, ipInfoTestPayload)
+	baseURL, _, _ := startIPInfoTestServer(t, http.StatusOK, ipInfoTestPayload)
 
 	tests := []struct {
 		name     string
@@ -138,14 +153,16 @@ func TestIPLookupRequestPath(t *testing.T) {
 
 	assert := assert.New(t)
 
-	baseURL, paths := startJSONTestServer(t, http.StatusOK, ipInfoTestPayload)
+	baseURL, wait, paths := startIPInfoTestServer(t, http.StatusOK, ipInfoTestPayload)
 
 	_, err := executeCommand(t, argIPLookup, argFlagBaseURL, baseURL, "8.8.8.8")
 	require.NoError(t, err)
+	wait()
 	assert.Equal([]string{"/8.8.8.8/json"}, *paths)
 
 	_, err = executeCommand(t, argIPLookup, argFlagBaseURL, baseURL)
 	require.NoError(t, err)
+	wait()
 	assert.Equal([]string{"/8.8.8.8/json", "/json"}, *paths)
 }
 
@@ -154,7 +171,7 @@ func TestIPLookupSkipsEmptyFields(t *testing.T) {
 
 	assert := assert.New(t)
 
-	baseURL, _ := startJSONTestServer(t, http.StatusOK, ipInfoMinimalPayload)
+	baseURL, _, _ := startIPInfoTestServer(t, http.StatusOK, ipInfoMinimalPayload)
 
 	out, err := executeCommand(t, argIPLookup, argFlagBaseURL, baseURL)
 	require.NoError(t, err)
@@ -167,11 +184,11 @@ func TestIPLookupSkipsEmptyFields(t *testing.T) {
 func TestIPLookupErrors(t *testing.T) {
 	t.Parallel()
 
-	okURL, _ := startJSONTestServer(t, http.StatusOK, ipInfoTestPayload)
-	rateURL, _ := startJSONTestServer(t, http.StatusTooManyRequests,
+	okURL, _, _ := startIPInfoTestServer(t, http.StatusOK, ipInfoTestPayload)
+	rateURL, _, _ := startIPInfoTestServer(t, http.StatusTooManyRequests,
 		`{"status":429,"error":{"title":"Rate limited","message":"Quota exceeded"}}`)
-	plainURL, _ := startJSONTestServer(t, http.StatusInternalServerError, "boom")
-	badJSONURL, _ := startJSONTestServer(t, http.StatusOK, "{not json")
+	plainURL, _, _ := startIPInfoTestServer(t, http.StatusInternalServerError, "boom")
+	badJSONURL, _, _ := startIPInfoTestServer(t, http.StatusOK, "{not json")
 
 	tests := []struct {
 		name    string
