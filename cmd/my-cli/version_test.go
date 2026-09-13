@@ -96,7 +96,7 @@ func TestVersionCommandUsageErrors(t *testing.T) {
 	}{
 		{
 			name:    "unexpected positional argument",
-			args:    []string{argVersion, "extra"},
+			args:    []string{argVersion, argExtra},
 			wantMsg: "unknown command",
 		},
 		{

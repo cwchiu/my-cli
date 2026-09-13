@@ -278,7 +278,7 @@ func TestOpenaiChatTestUsageErrors(t *testing.T) {
 		},
 		{
 			name:    "unexpected positional argument",
-			args:    []string{argOpenaiChatTest, flagBaseAPI, "http://localhost/v1", flagModel, "m", "extra"},
+			args:    []string{argOpenaiChatTest, flagBaseAPI, "http://localhost/v1", flagModel, "m", argExtra},
 			wantMsg: "unknown command",
 		},
 		{

@@ -85,7 +85,7 @@ func TestHTTPStaticServerResolveErrors(t *testing.T) {
 		},
 		{
 			name: "extra positional arg is a usage error",
-			args: []string{argHTTPStaticServer, argFlagFolder, folder, "extra"},
+			args: []string{argHTTPStaticServer, argFlagFolder, folder, argExtra},
 		},
 	}
 

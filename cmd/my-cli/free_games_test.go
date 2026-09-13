@@ -91,6 +91,11 @@ const argFreeGames = "free-games"
 // argFlagPlatform is the --platform flag used across free-games tests.
 const argFlagPlatform = "--platform"
 
+// argExtra is a positional argument used by tests across the package to
+// exercise "unknown command" rejection; goconst flags the repeated literal
+// otherwise.
+const argExtra = "extra"
+
 func TestFreeGamesCommand(t *testing.T) {
 	t.Parallel()
 
@@ -275,7 +280,7 @@ func TestFreeGamesErrors(t *testing.T) {
 		},
 		{
 			name:    "positional args are rejected",
-			args:    []string{argFreeGames, argFlagBaseURL, okURL, "extra"},
+			args:    []string{argFreeGames, argFlagBaseURL, okURL, argExtra},
 			wantErr: "unknown command",
 			isUsage: false,
 		},
