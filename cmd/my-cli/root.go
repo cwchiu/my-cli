@@ -54,6 +54,7 @@ Run "my-cli <command> --help" for details on a specific command.`,
 	rootCmd.AddCommand(newIPLookupCmd())
 	rootCmd.AddCommand(newHTTPStaticServerCmd())
 	rootCmd.AddCommand(newCertInfoCmd())
+	rootCmd.AddCommand(newFreeGamesCmd())
 
 	return rootCmd
 }
