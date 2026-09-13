@@ -33,6 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   public API (`GET /api/giveaways`) for Steam, Epic Games Store, and Android,
   dropping expired giveaways and non-game entries, sorted by end time, with
   `table`/`json`/`csv` output.
+- `password-gen` subcommand: generate a cryptographically random password
+  locally with configurable character classes (`--no-digits`, `--no-upper`,
+  `--no-lower`, `--symbols`), a default length of 16, and `table`/`json`
+  output.
 
 ## [0.2.0] - 2026-09-12
 
