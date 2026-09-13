@@ -63,6 +63,8 @@ specs/20260912-add-http-static-server.md   # 本檔
 5. **平行子測試時序**：修好 #4 後 `TestHTTPStaticServerServesFiles` 反而失敗——`cancel()` 寫在父測試函式尾端，但 Go 的平行子測試在**父函式 return 後**才恢復執行，server 在子測試發請求前就被關掉了（日誌顯示 "shutting down" 先於子測試請求）。
 6. **lint 尾聲**：`--folder` 字面量出現 6 次觸發 goconst；`fmt.Sprint(port)` 觸發 perfsprint；`listener.Addr().(*net.TCPAddr)` 型別斷言觸發 errcheck（check-type-assertions）。
 7. **PowerShell 管線遮蔽**：`go test ... | Select-Object -Last 30` 會緩衝全部輸出，逾時期間完全看不到進度，誤判為無輸出。
+8. **CI gosec 與本機 golangci-lint 的 gosec 版本不一致（PR #12 首輪 checks 失敗）**：本機 `golangci-lint run` 0 issues，但 CI 的 `securego/gosec@v2.29.0` check run 失敗——`//nolint:gosec` 是 golangci-lint 的抑制語法，**gosec 本體不認得**，只認 `#nosec` 註解；G703（taint-analysis path traversal）在 CI 上照報。
+9. **rebase 衝突**：ip-lookup（PR #14）先合併進 main 後，本分支 rebase 時 `root.go`（命令註冊順序）與 `README.md`（Commands 表 + 小節順序）衝突。
 
 ## 如何解決
 
@@ -73,6 +75,8 @@ specs/20260912-add-http-static-server.md   # 本檔
 5. 關閉邏輯移入 `t.Cleanup`：Cleanup 在**所有平行子測試完成後**執行，時序正確；並加註解說明原因。
 6. `--folder` 抽成 `argFlagFolder` 常數；`fmt.Sprint` → `strconv.Itoa`；型別斷言改 `addr, ok := ...; require.True(t, ok)`。
 7. 診斷時不用管線，直接跑裸指令或重導檔案；逾時改用 `-timeout` 參數而非 shell timeout。
+8. 抑制語法改為 gosec 原生格式：`// #nosec G703 -- user-selected folder is the feature, not an injection sink`（gosec 與 golangci-lint 都認得；`#nosec` 帶 rule ID 與理由也符合 gosec `-nosec-require-rules`/`-nosec-require-justification` 的嚴格模式）。本機以 `go run github.com/securego/gosec/v2/cmd/gosec@v2.29.0 ./...` 重現 CI 結果驗證（Issues: 0）。教訓：**本機 lint 綠 ≠ CI SAST 綠**，兩者掃描器不同，提交前應以 CI 同版本 gosec 驗證。
+9. rebase 衝突手動解決：`root.go` 兩個命令都保留（`newIPLookupCmd()` 在前、`newHTTPStaticServerCmd()` 在後）；`README.md` 兩個小節都保留（ip-lookup 在前、http-static-server 在後），解完後四關重跑全綠。
 
 ## 最後變動了什麼
 
@@ -93,3 +97,9 @@ specs/20260912-add-http-static-server.md   # 本檔
 - `go test -shuffle=on -timeout 120s ./...`：全綠——`cmd/my-cli`、`internal/falconcis`、`internal/nexus` 全部 `ok`。
 - `go tool task security:all`：通過——govulncheck 0 漏洞、osv-scanner 0 漏洞（298 packages）、gosec 完成（SARIF 產出後清除）。
 - 手動驗證：實際起 server（`--folder <temp> --port 18123`）→ `GET /hello.txt` 回 200 內容正確、`GET /missing.txt` 回 404；slog 存取日誌（method/path/status/duration/remote）正確輸出到 stderr；usage 錯誤（缺 folder、port abc）exit code 2。Ctrl-C 優雅關閉路徑由單元測試覆蓋（`"shutting down" grace=5s` + `srv.Shutdown` 無誤差返回）；Windows 終端環境無法從外部對子程序送 console signal，故未做互動式 Ctrl-C 實測。
+
+## PR 後續修正（2026-09-13）
+
+- **CI gosec check run 失敗**（PR #12 首輪 checks）：`//nolint:gosec` 僅對 golangci-lint 有效，CI 的 `securego/gosec@v2.29.0` 不認得，G703 照報（failure annotation）。改為 `// #nosec G703 -- 理由` 後，本機以 CI 同版本 gosec 驗證 `Issues: 0`。
+- **rebase onto main**（ip-lookup 先合併）：解決 `root.go` 與 `README.md` 衝突（兩邊內容都保留），修正 rebase 帶入的縮排問題（gofumpt/wsl_v5），四關重跑全綠（build/vet 無輸出、lint 0 issues、test 三套件 ok、security:all govulncheck 0 + osv-scanner 0/298 + gosec Issues: 0）。
+- **CodeQL `go/log-injection` alert（line 248，medium）**：存取日誌記錄 `r.URL.Path`（使用者可控）。評估：路徑僅寫入本機 stderr 的 slog 結構化欄位（非 SQL/shell/HTML sink），且 `http.FileServer` 已拒絕路徑正規化失敗的請求；不構成可利用注入，屬可接受風險，不修改程式碼。CodeQL check run 結論為 success，不阻擋合併。

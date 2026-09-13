@@ -149,7 +149,7 @@ func resolveHTTPStaticServerConfig(raw httpStaticServerConfig) (httpStaticServer
 	// The folder is intentionally user-supplied: serving a directory of the
 	// operator's choice is the whole purpose of this command, and
 	// http.FileServer confines request paths to that directory.
-	info, err := os.Stat(folder) //nolint:gosec // G703: user-selected folder is the feature, not an injection sink
+	info, err := os.Stat(folder) // #nosec G703 -- user-selected folder is the feature, not an injection sink
 	if err != nil {
 		return httpStaticServerSettings{}, fmt.Errorf("stat folder %q: %w", folder, err)
 	}
