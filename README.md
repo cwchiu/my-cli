@@ -276,25 +276,49 @@ Run `my-cli password-gen --help` for the full reference.
 
 ### translate-file
 
-Translates a UTF-8 plain-text file with a separately running
-[DeepLX](https://github.com/OwO-Network/DeepLX) compatible service and writes
-the source and Traditional Chinese translation as a bilingual pair.
+Translates a UTF-8 plain-text file paragraph by paragraph (blank-line
+separated) and writes each source paragraph followed by its Traditional
+Chinese translation, so every paragraph keeps its translation side by side.
 
 ```console
 $ my-cli translate-file article.txt
+First paragraph.
+第一段翻譯。
+
+Second paragraph.
+第二段翻譯。
+
 $ my-cli translate-file article.txt --endpoint http://localhost:1188/translate
+$ my-cli translate-file article.txt --provider google
+$ my-cli translate-file article.txt --provider microsoft
 $ my-cli translate-file article.txt --output json
 ```
 
 | Flag           | Description                                                             |
 | -------------- | ----------------------------------------------------------------------- |
-| `--endpoint`   | DeepLX-compatible translation endpoint (default `http://localhost:1188/translate`). |
+| `--provider`   | Translation provider: `deeplx`, `google`, or `microsoft` (default `deeplx`). |
+| `--endpoint`   | Override the selected provider endpoint (primarily for self-hosting or testing). |
 | `--timeout`    | Total request timeout (default `30s`).                                  |
 | `--output, -o` | Output format: `table|json` (default `table`).                          |
 
-The default DeepLX endpoint is local. Pass `--endpoint` when the service is
-hosted elsewhere. Output is written to stdout, so `--output json` can be piped
-to another program.
+The default DeepLX endpoint is local (`http://localhost:1188/translate`), so a
+DeepLX service must be running separately. The `google` and `microsoft`
+providers use the same public endpoints as the [read-frog](https://github.com/mengxi-ream/read-frog)
+project and require **no API keys or configuration**:
+
+- `google` — POST `translate-pa.googleapis.com/v1/translateHtml` with the
+  public browser API key read-frog embeds in its open-source code.
+- `microsoft` — POST `edge.microsoft.com/translate/translatetext`, which is
+  unauthenticated.
+
+Both providers escape HTML-sensitive characters before sending and decode HTML
+entities in the response, matching read-frog's behavior.
+
+Paragraphs are separated by blank lines; consecutive lines inside one
+paragraph are translated together and keep their line breaks. `--output json`
+emits an array of `{source, translation}` pairs, one per paragraph.
+
+Output is written to stdout, so `--output json` can be piped to another program.
 
 Run `my-cli translate-file --help` for the full reference.
 

@@ -12,6 +12,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `translate-file` subcommand: translate UTF-8 plain-text files using a
   configurable DeepLX-compatible endpoint and print bilingual source and
   Traditional Chinese output (`table` or `json`).
+- `translate-file --provider`: select DeepLX, Google Translate, or Microsoft
+  Translator. Google and Microsoft use the same public endpoints as the
+  read-frog project and require no API keys or configuration.
+- `translate-file` paragraph-aligned output: the file is split into paragraphs
+  (blank-line separated), each paragraph is translated separately, and the
+  table output prints each source paragraph followed by its translation;
+  `--output json` emits an array of `{source, translation}` pairs.
 
 ## [0.3.0] - 2026-09-14
 

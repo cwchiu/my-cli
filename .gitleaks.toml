@@ -7,6 +7,15 @@
 
 title = "my-cli gitleaks config"
 
-[allowlist]
-description = "Project-wide allowlist (empty by default; add regex/path rules here when false positives appear)"
-paths = []
+# Add [[allowlists]] entries here when false positives appear — with a regex
+# or path rule, never by disabling the scan.
+
+[[allowlists]]
+description = "Public browser API key embedded in read-frog's open-source code (wt_lib translateHtml client); not a secret credential"
+# The exact key constant in cmd/my-cli/translate_file.go, documented with a
+# #nosec G101 comment in the source. It is published in read-frog's repository
+# and is required for the endpoint to work, like a public client ID.
+regexTarget = "line"
+regexes = [
+  '''AIzaSyATBXajvzQLTDHEQbcpq0Ihe0vWDHmO520''',
+]
