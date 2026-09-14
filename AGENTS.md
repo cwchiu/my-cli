@@ -267,7 +267,7 @@ GitHub Actions 階段順序：**test → lint → security（SAST + SCA + Secret
    ```powershell
    gh pr create --base main --head feat/<topic> --title "<type>: <summary>" --body "Closes #<issue-number>"
    ```
-6. **審核與合併**：等待 CI 全部通過並取得必要審核後，由 GitHub PR 合併到 `main`；不得以本地直接 merge 取代 PR 審核流程。確認 PR 狀態為 `MERGED`，且來源 Issue 已自動關閉。
+6. **審核與合併**：等待 CI 全部通過後，由 GitHub PR 合併到 `main`；單人 repo 不強制要求 reviewer approval，但 PR 與 CI checks 仍是必要流程。不得以本地直接 merge 取代 PR 流程。**禁止 AI agent、automation、bot 或其他自動化流程自行批准或合併 PR；必須取得使用者明確授權後，才可執行 `gh pr merge`、GitHub merge API 或任何等效合併操作。** 未取得明確授權時，只能回報 PR 狀態。確認 PR 狀態為 `MERGED`，且來源 Issue 已自動關閉。
 7. **回收 worktree 並同步 main**：PR 合併確認後，在主 repo 執行：
    ```powershell
    git fetch origin
