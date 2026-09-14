@@ -11,19 +11,12 @@ import (
 	"github.com/yuin/goldmark/extension"
 )
 
-type markdownToHTMLConfig struct {
-	input   string
-	outFile string
-}
-
 // newMarkdownToHTMLCmd returns the command that converts Markdown to HTML.
 func newMarkdownToHTMLCmd() *cobra.Command {
-	var raw markdownToHTMLConfig
-
-	cmd := &cobra.Command{
-		Use:   "markdown-to-html <input.md>",
-		Short: "Convert a Markdown file to HTML",
-		Long: `Convert a Markdown file to HTML using CommonMark and GFM extensions.
+	return newFileConversionCmd(
+		"markdown-to-html <input.md>",
+		"Convert a Markdown file to HTML",
+		`Convert a Markdown file to HTML using CommonMark and GFM extensions.
 
 The generated HTML fragment is written to stdout by default. Use --out to
 write it to a file instead. Raw HTML in the Markdown source is omitted by
@@ -32,17 +25,38 @@ default for safer output when the source is not trusted.
 Examples:
   my-cli markdown-to-html README.md
   my-cli markdown-to-html README.md --out README.html`,
-		Args: wrapUsage(cobra.ExactArgs(1)),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			raw.input = args[0]
+		"write the HTML to this file instead of stdout",
+		[]string{"html", "htm"},
+		func(stdout io.Writer, input, outFile string) error {
+			return runMarkdownToHTML(stdout, markdownToHTMLConfig{input: input, outFile: outFile})
+		},
+	)
+}
 
-			return runMarkdownToHTML(cmd.OutOrStdout(), raw)
+type markdownToHTMLConfig struct {
+	input   string
+	outFile string
+}
+
+func newFileConversionCmd(
+	use, short, long, outUsage string,
+	extensions []string,
+	convert func(io.Writer, string, string) error,
+) *cobra.Command {
+	var outFile string
+
+	cmd := &cobra.Command{
+		Use:   use,
+		Short: short,
+		Long:  long,
+		Args:  wrapUsage(cobra.ExactArgs(1)),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return convert(cmd.OutOrStdout(), args[0], outFile)
 		},
 	}
 
-	cmd.Flags().StringVarP(&raw.outFile, "out", "O", "",
-		"write the HTML to this file instead of stdout")
-	_ = cmd.MarkFlagFilename("out", "html", "htm")
+	cmd.Flags().StringVarP(&outFile, "out", "O", "", outUsage)
+	_ = cmd.MarkFlagFilename("out", extensions...)
 
 	return cmd
 }
