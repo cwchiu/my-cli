@@ -58,6 +58,9 @@ We need to add provider selection for translation calls so the command can suppo
   API-key detection even though the key is published in read-frog's OSS code.
 - gitleaks v8 rejects an empty `[allowlist]` alongside `[[allowlists]]` and
   rejects `[[allowlists]]` entries without at least one rule.
+- The user first asked for sentence-level bilingual pairs, then changed the
+  requirement to paragraph-level pairs; the output was reworked from one
+  whole-file `Source:/Chinese:` block to paragraph-aligned pairs.
 
 # 如何解決
 
@@ -87,6 +90,15 @@ We need to add provider selection for translation calls so the command can suppo
 - `.gitleaks.toml`: added a `[[allowlists]]` entry for the public browser key.
 - `README.md` and `CHANGELOG.md`: documented provider selection with no keys
   required.
+- Paragraph-aligned output (follow-up user request): `translate_file.go` now
+  splits the source into paragraphs (blank-line separated), translates each
+  paragraph separately (provider chunk limits still apply per paragraph), and
+  renders table output as alternating source/translation pairs; `--output
+  json` emits an array of `{source, translation}` pairs. Empty files fail with
+  "source file contains no translatable text".
+- `translate_file_test.go`: updated table/JSON assertions to the pair format
+  and added paragraph-splitting, inner-line preservation, and empty-source
+  tests.
 - Provider contracts are taken from the user-supplied read-frog source at commit
   `784a6f016fbd3fbe7fd3e671e2b94a8cdc9dddab`.
 
@@ -100,6 +112,9 @@ We need to add provider selection for translation calls so the command can suppo
 - Focused provider tests and command-package lint passed before final validation.
 - Root-cause fix after user rejection: replaced the guessed endpoints with the
   exact read-frog contracts and removed every credential requirement.
+- Paragraph-aligned output rework: `go build ./...`, `go vet ./...`,
+  `go tool golangci-lint run` (0 issues after switching to `strings.SplitSeq`
+  per the modernize linter), and `go test -shuffle=on ./...` (all packages ok).
 - Local gates: `go build ./...`, `go vet ./...`, `go tool golangci-lint run`
   (0 issues), `go test -shuffle=on ./...` (all packages ok),
   `go tool task security:all` (govulncheck 0 vulns, osv-scanner clean, gosec

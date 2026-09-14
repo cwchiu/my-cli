@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"html"
 	"io"
 	"net/http"
@@ -47,8 +48,7 @@ func TestTranslateFileCommand(t *testing.T) {
 	assert.Equal(t, testSourceText, request.Text)
 	assert.Equal(t, "auto", request.SourceLang)
 	assert.Equal(t, "ZH", request.TargetLang)
-	assert.Contains(t, out, "Source:\n"+testSourceText)
-	assert.Contains(t, out, "Chinese:\n你好，世界！")
+	assert.Equal(t, testSourceText+"\n你好，世界！\n\n", out)
 }
 
 func TestTranslateFileJSONOutput(t *testing.T) {
@@ -71,10 +71,11 @@ func TestTranslateFileJSONOutput(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	var result translateResult
-	require.NoError(t, json.Unmarshal([]byte(out), &result))
-	assert.Equal(t, testSourceText, result.Source)
-	assert.Equal(t, "你好，世界！", result.Translation)
+	var pairs []translatePair
+	require.NoError(t, json.Unmarshal([]byte(out), &pairs))
+	require.Len(t, pairs, 1)
+	assert.Equal(t, testSourceText, pairs[0].Source)
+	assert.Equal(t, "你好，世界！", pairs[0].Translation)
 }
 
 func TestTranslateFileGoogleProvider(t *testing.T) {
@@ -108,7 +109,7 @@ func TestTranslateFileGoogleProvider(t *testing.T) {
 		"--endpoint", server.URL+"/v1/translateHtml",
 	)
 	require.NoError(t, err)
-	assert.Contains(t, out, "Chinese:\n你好，\"世界\" & more")
+	assert.Contains(t, out, "你好，\"世界\" & more")
 }
 
 func TestTranslateFileGoogleEscapesHTML(t *testing.T) {
@@ -184,7 +185,7 @@ func TestTranslateFileMicrosoftProvider(t *testing.T) {
 		"--endpoint", server.URL+"/translate/translatetext",
 	)
 	require.NoError(t, err)
-	assert.Contains(t, out, "Chinese:\n你好，\"世界\" & more")
+	assert.Contains(t, out, "你好，\"世界\" & more")
 }
 
 func TestTranslateFileMicrosoftEscapesHTML(t *testing.T) {
@@ -218,6 +219,76 @@ func TestTranslateFileMicrosoftEscapesHTML(t *testing.T) {
 		"--endpoint", server.URL+"/translate/translatetext",
 	)
 	require.NoError(t, err)
+}
+
+func TestTranslateFileParagraphPairs(t *testing.T) {
+	t.Parallel()
+
+	inputPath := writeTranslateTestFile(t, "First paragraph.\n\nSecond paragraph.\n\n\nThird paragraph.\n")
+
+	var requests int
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, requestIn *http.Request) {
+		requests++
+
+		var payload translateRequest
+		if err := json.NewDecoder(requestIn.Body).Decode(&payload); err != nil {
+			t.Errorf("decode translation request: %v", err)
+		}
+
+		writer.Header().Set("Content-Type", "application/json")
+
+		if _, err := fmt.Fprintf(writer, `{"data":"翻譯 %d"}`, requests); err != nil {
+			t.Errorf("write translation response: %v", err)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	out, err := executeCommand(t, argTranslateFile, inputPath, "--endpoint", server.URL)
+	require.NoError(t, err)
+	assert.Equal(t, 3, requests)
+	assert.Equal(t,
+		"First paragraph.\n翻譯 1\n\nSecond paragraph.\n翻譯 2\n\nThird paragraph.\n翻譯 3\n\n",
+		out,
+	)
+}
+
+func TestTranslateFileParagraphsKeepInnerLines(t *testing.T) {
+	t.Parallel()
+
+	inputPath := writeTranslateTestFile(t, "line one\nline two\n\nnext paragraph")
+
+	var seen []string
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, requestIn *http.Request) {
+		var payload translateRequest
+		if err := json.NewDecoder(requestIn.Body).Decode(&payload); err != nil {
+			t.Errorf("decode translation request: %v", err)
+		}
+
+		seen = append(seen, payload.Text)
+
+		writer.Header().Set("Content-Type", "application/json")
+
+		if _, err := writer.Write([]byte(`{"data":"ok"}`)); err != nil {
+			t.Errorf("write translation response: %v", err)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	_, err := executeCommand(t, argTranslateFile, inputPath, "--endpoint", server.URL)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"line one\nline two", "next paragraph"}, seen)
+}
+
+func TestTranslateFileEmptySource(t *testing.T) {
+	t.Parallel()
+
+	inputPath := writeTranslateTestFile(t, "\n\n  \n")
+
+	_, err := executeCommand(t, argTranslateFile, inputPath, "--endpoint", "http://localhost:1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "source file contains no translatable text")
 }
 
 func TestTranslateFileUsageErrors(t *testing.T) {

@@ -62,29 +62,31 @@ type translateResponse struct {
 	Data string `json:"data"`
 }
 
-// translateResult is the bilingual output of one translation request.
-type translateResult struct {
+// translatePair is one source paragraph with its Traditional Chinese
+// translation.
+type translatePair struct {
 	Source      string `json:"source"`
 	Translation string `json:"translation"`
 }
 
-// newTranslateFileCmd returns the `translate-file` subcommand, which sends a
-// UTF-8 text file to a DeepLX-compatible endpoint and prints the source with
-// its Traditional Chinese translation.
+// newTranslateFileCmd returns the `translate-file` subcommand, which translates
+// a UTF-8 text file paragraph by paragraph and prints each source paragraph
+// with its Traditional Chinese translation.
 func newTranslateFileCmd() *cobra.Command {
 	var raw translateConfig
 
 	cmd := &cobra.Command{
 		Use:   "translate-file FILE",
 		Short: "Translate a text file into Traditional Chinese",
-		Long: `Read a UTF-8 plain-text file, translate it, and print the source and
-Traditional Chinese translation together.
+		Long: `Read a UTF-8 plain-text file, translate it paragraph by paragraph
+(blank-line separated), and print each source paragraph with its Traditional
+Chinese translation.
 
 Use --provider to choose deeplx, google, or microsoft. DeepLX must be running
 separately. The google and microsoft providers use the same public endpoints
 as the read-frog project and require no API keys.
 
-Use --output json for machine-readable bilingual output.`,
+Use --output json for machine-readable paragraph pairs.`,
 		Example: `  my-cli translate-file article.txt
   my-cli translate-file article.txt --provider google
   my-cli translate-file article.txt --provider microsoft
@@ -96,12 +98,12 @@ Use --output json for machine-readable bilingual output.`,
 				return err
 			}
 
-			result, err := translateFile(cmd.Context(), args[0], cfg)
+			pairs, err := translateFile(cmd.Context(), args[0], cfg)
 			if err != nil {
 				return err
 			}
 
-			return renderTranslateResult(cmd.OutOrStdout(), cfg.outputFormat, result)
+			return renderTranslateResult(cmd.OutOrStdout(), cfg.outputFormat, pairs)
 		},
 	}
 
@@ -179,9 +181,9 @@ func defaultProviderEndpoint(provider, endpoint string) (string, error) {
 	}
 }
 
-// translateFile reads one bounded text file and sends it to the configured
-// DeepLX-compatible endpoint.
-func translateFile(ctx context.Context, filename string, cfg translateConfig) (*translateResult, error) {
+// translateFile reads one bounded text file and translates it paragraph by
+// paragraph through the configured provider.
+func translateFile(ctx context.Context, filename string, cfg translateConfig) ([]translatePair, error) {
 	source, err := readTranslateFile(filename)
 	if err != nil {
 		return nil, err
@@ -222,29 +224,69 @@ func readTranslateFile(filename string) (string, error) {
 	return string(contents), nil
 }
 
-// requestTranslation sends source text through the selected translation provider.
-func requestTranslation(ctx context.Context, source string, cfg translateConfig) (*translateResult, error) {
-	var (
-		translation string
-		err         error
-	)
+// requestTranslation translates each paragraph of the source text and returns
+// paragraph-aligned pairs.
+func requestTranslation(ctx context.Context, source string, cfg translateConfig) ([]translatePair, error) {
+	paragraphs := splitParagraphs(source)
+	if len(paragraphs) == 0 {
+		return nil, errors.New("source file contains no translatable text")
+	}
 
+	pairs := make([]translatePair, 0, len(paragraphs))
+
+	for _, paragraph := range paragraphs {
+		translation, err := translateParagraph(ctx, paragraph, cfg)
+		if err != nil {
+			return nil, err
+		}
+
+		pairs = append(pairs, translatePair{Source: paragraph, Translation: translation})
+	}
+
+	return pairs, nil
+}
+
+// translateParagraph routes one paragraph through the selected provider.
+func translateParagraph(ctx context.Context, paragraph string, cfg translateConfig) (string, error) {
 	switch cfg.provider {
 	case translateProviderDeepLX:
-		translation, err = translateDeepLX(ctx, source, cfg)
+		return translateDeepLX(ctx, paragraph, cfg)
 	case translateProviderGoogle:
-		translation, err = translateGoogle(ctx, source, cfg)
+		return translateGoogle(ctx, paragraph, cfg)
 	case translateProviderMicrosoft:
-		translation, err = translateMicrosoft(ctx, source, cfg)
+		return translateMicrosoft(ctx, paragraph, cfg)
 	default:
-		return nil, fmt.Errorf("unsupported translation provider %q", cfg.provider)
+		return "", fmt.Errorf("unsupported translation provider %q", cfg.provider)
+	}
+}
+
+// splitParagraphs divides source text into paragraphs separated by blank or
+// whitespace-only lines.
+func splitParagraphs(source string) []string {
+	paragraphs := make([]string, 0)
+
+	var current []string
+
+	flush := func() {
+		if len(current) > 0 {
+			paragraphs = append(paragraphs, strings.Join(current, "\n"))
+			current = nil
+		}
 	}
 
-	if err != nil {
-		return nil, err
+	for line := range strings.SplitSeq(source, "\n") {
+		if strings.TrimSpace(line) == "" {
+			flush()
+
+			continue
+		}
+
+		current = append(current, line)
 	}
 
-	return &translateResult{Source: source, Translation: translation}, nil
+	flush()
+
+	return paragraphs
 }
 
 // translateDeepLX posts source text to a DeepLX-compatible endpoint.
@@ -425,11 +467,12 @@ func appendTranslatedChunk(builder *strings.Builder, translate func(string) (str
 	return nil
 }
 
-// renderTranslateResult writes a bilingual result in the requested format.
-func renderTranslateResult(out io.Writer, format string, result *translateResult) error {
+// renderTranslateResult writes paragraph-aligned bilingual results in the
+// requested format.
+func renderTranslateResult(out io.Writer, format string, pairs []translatePair) error {
 	switch format {
 	case outputFormatJSON:
-		data, err := json.MarshalIndent(result, "", "  ")
+		data, err := json.MarshalIndent(pairs, "", "  ")
 		if err != nil {
 			return fmt.Errorf("marshal translation result: %w", err)
 		}
@@ -438,11 +481,30 @@ func renderTranslateResult(out io.Writer, format string, result *translateResult
 			return fmt.Errorf("print translation result: %w", err)
 		}
 	case outputFormatTable:
-		if _, err := fmt.Fprintf(out, "Source:\n%s\n\nChinese:\n%s\n", result.Source, result.Translation); err != nil {
-			return fmt.Errorf("print translation result: %w", err)
+		if err := renderTranslatePairs(out, pairs); err != nil {
+			return err
 		}
 	default:
 		return fmt.Errorf("%s %q", outputFormatErrorPrefix, format)
+	}
+
+	return nil
+}
+
+// renderTranslatePairs writes each source paragraph followed by its
+// translation, with a blank line between pairs.
+func renderTranslatePairs(out io.Writer, pairs []translatePair) error {
+	var builder strings.Builder
+
+	for _, pair := range pairs {
+		builder.WriteString(pair.Source)
+		builder.WriteString("\n")
+		builder.WriteString(pair.Translation)
+		builder.WriteString("\n\n")
+	}
+
+	if _, err := fmt.Fprint(out, builder.String()); err != nil {
+		return fmt.Errorf("print translation result: %w", err)
 	}
 
 	return nil

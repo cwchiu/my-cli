@@ -276,12 +276,18 @@ Run `my-cli password-gen --help` for the full reference.
 
 ### translate-file
 
-Translates a UTF-8 plain-text file with a separately running
-[DeepLX](https://github.com/OwO-Network/DeepLX) compatible service and writes
-the source and Traditional Chinese translation as a bilingual pair.
+Translates a UTF-8 plain-text file paragraph by paragraph (blank-line
+separated) and writes each source paragraph followed by its Traditional
+Chinese translation, so every paragraph keeps its translation side by side.
 
 ```console
 $ my-cli translate-file article.txt
+First paragraph.
+第一段翻譯。
+
+Second paragraph.
+第二段翻譯。
+
 $ my-cli translate-file article.txt --endpoint http://localhost:1188/translate
 $ my-cli translate-file article.txt --provider google
 $ my-cli translate-file article.txt --provider microsoft
@@ -307,6 +313,10 @@ project and require **no API keys or configuration**:
 
 Both providers escape HTML-sensitive characters before sending and decode HTML
 entities in the response, matching read-frog's behavior.
+
+Paragraphs are separated by blank lines; consecutive lines inside one
+paragraph are translated together and keep their line breaks. `--output json`
+emits an array of `{source, translation}` pairs, one per paragraph.
 
 Output is written to stdout, so `--output json` can be piped to another program.
 
