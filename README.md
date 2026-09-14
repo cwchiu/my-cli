@@ -74,6 +74,7 @@ $ my-cli version -o json
 | `cert-info`          | Show the TLS certificate chain served by a host.                   |
 | `free-games`         | List limited-time free games (Steam/Epic/Android).                 |
 | `password-gen`       | Generate a cryptographically random password locally.               |
+| `translate-file`     | Translate a text file to Traditional Chinese with DeepLX.           |
 
 Global flags:
 
@@ -272,6 +273,30 @@ position. The default result is a 16-character password containing digits,
 uppercase, and lowercase; `--symbols` adds the symbol set.
 
 Run `my-cli password-gen --help` for the full reference.
+
+### translate-file
+
+Translates a UTF-8 plain-text file with a separately running
+[DeepLX](https://github.com/OwO-Network/DeepLX) compatible service and writes
+the source and Traditional Chinese translation as a bilingual pair.
+
+```console
+$ my-cli translate-file article.txt
+$ my-cli translate-file article.txt --endpoint http://localhost:1188/translate
+$ my-cli translate-file article.txt --output json
+```
+
+| Flag           | Description                                                             |
+| -------------- | ----------------------------------------------------------------------- |
+| `--endpoint`   | DeepLX-compatible translation endpoint (default `http://localhost:1188/translate`). |
+| `--timeout`    | Total request timeout (default `30s`).                                  |
+| `--output, -o` | Output format: `table|json` (default `table`).                          |
+
+The default DeepLX endpoint is local. Pass `--endpoint` when the service is
+hosted elsewhere. Output is written to stdout, so `--output json` can be piped
+to another program.
+
+Run `my-cli translate-file --help` for the full reference.
 
 ### Exit codes
 

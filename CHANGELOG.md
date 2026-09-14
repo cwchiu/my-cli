@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `translate-file` subcommand: translate UTF-8 plain-text files using a
+  configurable DeepLX-compatible endpoint and print bilingual source and
+  Traditional Chinese output (`table` or `json`).
+
 ## [0.3.0] - 2026-09-14
 
 ### Added
