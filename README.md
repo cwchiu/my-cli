@@ -74,7 +74,8 @@ $ my-cli version -o json
 | `cert-info`          | Show the TLS certificate chain served by a host.                   |
 | `free-games`         | List limited-time free games (Steam/Epic/Android).                 |
 | `password-gen`       | Generate a cryptographically random password locally.               |
-| `markdown-to-html`   | Convert a Markdown file to an HTML fragment.                         |
+| `markdown-to-html`   | Convert a Markdown file to an HTML fragment.                       |
+| `pdf-to-markdown`    | Extract PDF text as Markdown.                                       |
 
 Global flags:
 

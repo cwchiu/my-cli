@@ -188,6 +188,7 @@ require (
 	github.com/ldez/structtags v0.6.1 // indirect
 	github.com/ldez/tagliatelle v0.7.2 // indirect
 	github.com/ldez/usetesting v0.5.0 // indirect
+	github.com/ledongthuc/pdf v0.0.0-20260907135840-6c8c28e0e8a0 // indirect
 	github.com/leonklingele/grouper v1.1.2 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
 	github.com/macabu/inamedparam v0.2.0 // indirect
