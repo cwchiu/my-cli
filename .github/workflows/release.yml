@@ -12,13 +12,13 @@ jobs:
     name: Release (GoReleaser)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # GoReleaser 需要完整歷史與標籤來產生 changelog
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
 
