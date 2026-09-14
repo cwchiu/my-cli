@@ -56,6 +56,7 @@ Run "my-cli <command> --help" for details on a specific command.`,
 	rootCmd.AddCommand(newCertInfoCmd())
 	rootCmd.AddCommand(newFreeGamesCmd())
 	rootCmd.AddCommand(newPasswordGenCmd())
+	rootCmd.AddCommand(newMarkdownToHTMLCmd())
 
 	return rootCmd
 }
