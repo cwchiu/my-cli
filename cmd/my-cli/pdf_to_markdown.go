@@ -17,12 +17,10 @@ type pdfToMarkdownConfig struct {
 
 // newPDFToMarkdownCmd returns the command that extracts PDF text as Markdown.
 func newPDFToMarkdownCmd() *cobra.Command {
-	var raw pdfToMarkdownConfig
-
-	cmd := &cobra.Command{
-		Use:   "pdf-to-markdown <input.pdf>",
-		Short: "Extract PDF text as Markdown",
-		Long: `Extract text from a PDF and write it as Markdown.
+	return newFileConversionCmd(
+		"pdf-to-markdown <input.pdf>",
+		"Extract PDF text as Markdown",
+		`Extract text from a PDF and write it as Markdown.
 
 The converter preserves page and row order and writes the result to stdout by
 default. Use --out to write it to a file instead. Text layout is preserved as
@@ -32,19 +30,12 @@ multi-column layout require OCR or a dedicated layout workflow.
 Examples:
   my-cli pdf-to-markdown report.pdf
   my-cli pdf-to-markdown report.pdf --out report.md`,
-		Args: wrapUsage(cobra.ExactArgs(1)),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			raw.input = args[0]
-
-			return runPDFToMarkdown(cmd.OutOrStdout(), raw)
+		"write the Markdown to this file instead of stdout",
+		[]string{"md", "markdown"},
+		func(stdout io.Writer, input, outFile string) error {
+			return runPDFToMarkdown(stdout, pdfToMarkdownConfig{input: input, outFile: outFile})
 		},
-	}
-
-	cmd.Flags().StringVarP(&raw.outFile, "out", "O", "",
-		"write the Markdown to this file instead of stdout")
-	_ = cmd.MarkFlagFilename("out", "md", "markdown")
-
-	return cmd
+	)
 }
 
 func runPDFToMarkdown(stdout io.Writer, cfg pdfToMarkdownConfig) error {
