@@ -76,6 +76,81 @@ func TestTranslateFileJSONOutput(t *testing.T) {
 	assert.Equal(t, "你好，世界！", result.Translation)
 }
 
+func TestTranslateFileGoogleProvider(t *testing.T) {
+	t.Parallel()
+
+	inputPath := writeTranslateTestFile(t, testSourceText)
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		assert.Equal(t, http.MethodGet, request.Method)
+		assert.Equal(t, "/translate_a/single", request.URL.Path)
+		assert.Equal(t, "gtx", request.URL.Query().Get("client"))
+		assert.Equal(t, "auto", request.URL.Query().Get("sl"))
+		assert.Equal(t, "zh-TW", request.URL.Query().Get("tl"))
+		assert.Equal(t, testSourceText, request.URL.Query().Get("q"))
+
+		writer.Header().Set("Content-Type", "application/json")
+
+		if _, err := writer.Write([]byte(`{"sentences":[{"trans":"你好，"},{"trans":"世界！"}]}`)); err != nil {
+			t.Errorf("write Google response: %v", err)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	out, err := executeCommand(t,
+		argTranslateFile, inputPath,
+		"--provider", translateProviderGoogle,
+		"--endpoint", server.URL+"/translate_a/single",
+	)
+	require.NoError(t, err)
+	assert.Contains(t, out, "Chinese:\n你好，世界！")
+}
+
+// TestTranslateFileMicrosoftProvider uses process-wide environment variables
+// for credentials and therefore cannot run in parallel.
+func TestTranslateFileMicrosoftProvider(t *testing.T) {
+	inputPath := writeTranslateTestFile(t, testSourceText)
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		assert.Equal(t, http.MethodPost, request.Method)
+		assert.Equal(t, "/translate", request.URL.Path)
+		assert.Equal(t, "3.0", request.URL.Query().Get("api-version"))
+		assert.Equal(t, "auto-detect", request.URL.Query().Get("from"))
+		assert.Equal(t, "zh-Hant", request.URL.Query().Get("to"))
+		assert.Equal(t, "test-key", request.Header.Get("Ocp-Apim-Subscription-Key"))
+		assert.Equal(t, "westus", request.Header.Get("Ocp-Apim-Subscription-Region"))
+
+		var payload []struct {
+			Text string `json:"Text"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			t.Errorf("decode Microsoft request: %v", err)
+		}
+
+		if len(payload) != 1 {
+			t.Errorf("Microsoft request item count = %d, want 1", len(payload))
+			return
+		}
+
+		assert.Equal(t, testSourceText, payload[0].Text)
+
+		writer.Header().Set("Content-Type", "application/json")
+
+		if _, err := writer.Write([]byte(`[{"translations":[{"text":"你好，世界！"}]}]`)); err != nil {
+			t.Errorf("write Microsoft response: %v", err)
+		}
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv(envMicrosoftTranslateKey, "test-key")
+	t.Setenv(envMicrosoftTranslateRegion, "westus")
+
+	out, err := executeCommand(t,
+		argTranslateFile, inputPath,
+		"--provider", translateProviderMicrosoft,
+		"--endpoint", server.URL+"/translate",
+	)
+	require.NoError(t, err)
+	assert.Contains(t, out, "Chinese:\n你好，世界！")
+}
+
 func TestTranslateFileUsageErrors(t *testing.T) {
 	t.Parallel()
 

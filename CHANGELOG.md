@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `translate-file` subcommand: translate UTF-8 plain-text files using a
   configurable DeepLX-compatible endpoint and print bilingual source and
   Traditional Chinese output (`table` or `json`).
+- `translate-file --provider`: select DeepLX, Google Translate, or Microsoft
+  Azure Translator. Google uses the public endpoint; Microsoft reads its
+  subscription key and region only from environment variables.
 
 ## [0.3.0] - 2026-09-14
 

@@ -283,18 +283,25 @@ the source and Traditional Chinese translation as a bilingual pair.
 ```console
 $ my-cli translate-file article.txt
 $ my-cli translate-file article.txt --endpoint http://localhost:1188/translate
+$ my-cli translate-file article.txt --provider google
+$ MICROSOFT_TRANSLATE_KEY=... MICROSOFT_TRANSLATE_REGION=westus my-cli translate-file article.txt --provider microsoft
 $ my-cli translate-file article.txt --output json
 ```
 
 | Flag           | Description                                                             |
 | -------------- | ----------------------------------------------------------------------- |
-| `--endpoint`   | DeepLX-compatible translation endpoint (default `http://localhost:1188/translate`). |
+| `--provider`   | Translation provider: `deeplx`, `google`, or `microsoft` (default `deeplx`). |
+| `--endpoint`   | Override the selected provider endpoint (primarily for self-hosting or testing). |
 | `--timeout`    | Total request timeout (default `30s`).                                  |
 | `--output, -o` | Output format: `table|json` (default `table`).                          |
 
-The default DeepLX endpoint is local. Pass `--endpoint` when the service is
-hosted elsewhere. Output is written to stdout, so `--output json` can be piped
-to another program.
+The default DeepLX endpoint is local (`http://localhost:1188/translate`), so a
+DeepLX service must be running separately. Google uses its public translation
+endpoint without credentials. Microsoft uses the Azure Translator endpoint and
+requires `MICROSOFT_TRANSLATE_KEY` and `MICROSOFT_TRANSLATE_REGION`; credentials
+are intentionally accepted only through environment variables, not flags.
+
+Output is written to stdout, so `--output json` can be piped to another program.
 
 Run `my-cli translate-file --help` for the full reference.
 
