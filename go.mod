@@ -5,9 +5,11 @@ go 1.26.0
 toolchain go1.26.8
 
 require (
+	github.com/ledongthuc/pdf v0.0.0-20260907135840-6c8c28e0e8a0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.12.1
+	github.com/yuin/goldmark v1.8.6
 )
 
 require (

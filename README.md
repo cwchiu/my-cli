@@ -75,6 +75,8 @@ $ my-cli version -o json
 | `free-games`         | List limited-time free games (Steam/Epic/Android).                 |
 | `password-gen`       | Generate a cryptographically random password locally.               |
 | `translate-file`     | Translate a text file to Traditional Chinese with DeepLX.           |
+| `markdown-to-html`   | Convert a Markdown file to an HTML fragment.                       |
+| `pdf-to-markdown`    | Extract PDF text as Markdown.                                       |
 
 Global flags:
 
