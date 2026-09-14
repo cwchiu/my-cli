@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"net/url"
@@ -26,29 +27,27 @@ const (
 	translateProviderGoogle    = "google"
 	translateProviderMicrosoft = "microsoft"
 	defaultDeepLXEndpoint      = "http://localhost:1188/translate"
-	defaultGoogleEndpoint      = "https://translate.googleapis.com/translate_a/single"
-	defaultMicrosoftEndpoint   = "https://api.cognitive.microsofttranslator.com/translate"
+	defaultGoogleEndpoint      = "https://translate-pa.googleapis.com/v1/translateHtml"
+	defaultMicrosoftEndpoint   = "https://edge.microsoft.com/translate/translatetext"
 	googleMaxChunkRunes        = 4_500
 	microsoftMaxChunkRunes     = 45_000
 )
 
-// envMicrosoftTranslateKey is the Microsoft Translator subscription-key environment variable.
+// googleTranslateAPIKey is the public browser API key that read-frog embeds in
+// its open-source code for the wt_lib translateHtml client. It is not a secret
+// credential; the endpoint works without it in some regions, but read-frog
+// always sends it, so this CLI mirrors that behavior.
 //
-// #nosec G101 -- this is an environment variable name, not a credential.
-const envMicrosoftTranslateKey = "MICROSOFT_TRANSLATE_KEY"
-
-// envMicrosoftTranslateRegion is the Microsoft Translator region environment variable.
-
-const envMicrosoftTranslateRegion = "MICROSOFT_TRANSLATE_REGION"
+// #nosec G101 -- public browser API key published in read-frog's open-source
+// code (wt_lib client), not a secret credential.
+const googleTranslateAPIKey = "AIzaSyATBXajvzQLTDHEQbcpq0Ihe0vWDHmO520"
 
 // translateConfig holds the command settings resolved from flags.
 type translateConfig struct {
-	endpoint        string
-	provider        string
-	microsoftKey    string
-	microsoftRegion string
-	timeout         time.Duration
-	outputFormat    string
+	endpoint     string
+	provider     string
+	timeout      time.Duration
+	outputFormat string
 }
 
 // translateRequest is the JSON payload accepted by DeepLX-compatible APIs.
@@ -78,17 +77,17 @@ func newTranslateFileCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "translate-file FILE",
 		Short: "Translate a text file into Traditional Chinese",
-		Long: `Read a UTF-8 plain-text file, translate it with a DeepLX-compatible API,
-and print the source and Traditional Chinese translation together.
+		Long: `Read a UTF-8 plain-text file, translate it, and print the source and
+Traditional Chinese translation together.
 
 Use --provider to choose deeplx, google, or microsoft. DeepLX must be running
-separately. Microsoft requires the MICROSOFT_TRANSLATE_KEY and
-MICROSOFT_TRANSLATE_REGION environment variables.
+separately. The google and microsoft providers use the same public endpoints
+as the read-frog project and require no API keys.
 
 Use --output json for machine-readable bilingual output.`,
 		Example: `  my-cli translate-file article.txt
-	  my-cli translate-file article.txt --provider google
-	  MICROSOFT_TRANSLATE_KEY=... MICROSOFT_TRANSLATE_REGION=westus my-cli translate-file article.txt --provider microsoft
+  my-cli translate-file article.txt --provider google
+  my-cli translate-file article.txt --provider microsoft
   my-cli translate-file article.txt --output json`,
 		Args: wrapUsage(cobra.ExactArgs(1)),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -154,20 +153,11 @@ func resolveTranslateConfig(raw translateConfig) (translateConfig, error) {
 		return translateConfig{}, fmt.Errorf("%s %q", outputFormatErrorPrefix, raw.outputFormat)
 	}
 
-	microsoftKey := os.Getenv(envMicrosoftTranslateKey)
-	microsoftRegion := os.Getenv(envMicrosoftTranslateRegion)
-
-	if raw.provider == translateProviderMicrosoft && (microsoftKey == "" || microsoftRegion == "") {
-		return translateConfig{}, errors.New("microsoft provider requires MICROSOFT_TRANSLATE_KEY and MICROSOFT_TRANSLATE_REGION")
-	}
-
 	return translateConfig{
-		endpoint:        strings.TrimRight(endpointValue, "/"),
-		provider:        raw.provider,
-		microsoftKey:    microsoftKey,
-		microsoftRegion: microsoftRegion,
-		timeout:         raw.timeout,
-		outputFormat:    raw.outputFormat,
+		endpoint:     strings.TrimRight(endpointValue, "/"),
+		provider:     raw.provider,
+		timeout:      raw.timeout,
+		outputFormat: raw.outputFormat,
 	}, nil
 }
 
@@ -294,62 +284,41 @@ func translateDeepLX(ctx context.Context, source string, cfg translateConfig) (s
 	return parsed.Data, nil
 }
 
-// translateGoogle calls the Google endpoint used by the referenced read-frog implementation.
+// translateGoogle calls the Google translateHtml endpoint used by the referenced read-frog implementation.
 func translateGoogle(ctx context.Context, source string, cfg translateConfig) (string, error) {
 	return translateChunks(source, googleMaxChunkRunes, func(chunk string) (string, error) {
-		endpoint, err := url.Parse(cfg.endpoint)
+		payload, err := json.Marshal([]any{[]any{[]string{html.EscapeString(chunk)}, "auto", "zh-TW"}, "wt_lib"})
 		if err != nil {
-			return "", fmt.Errorf("parse Google endpoint: %w", err)
+			return "", fmt.Errorf("marshal Google translation request: %w", err)
 		}
 
-		query := endpoint.Query()
-		query.Set("client", "gtx")
-		query.Set("sl", "auto")
-		query.Set("tl", "zh-TW")
-		query.Set("dt", "t")
-		query.Set("dj", "1")
-		query.Set("ie", "UTF-8")
-		query.Set("oe", "UTF-8")
-		query.Set("q", chunk)
-
-		endpoint.RawQuery = query.Encode()
-
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
+		request, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.endpoint, bytes.NewReader(payload))
 		if err != nil {
 			return "", fmt.Errorf("build Google translation request: %w", err)
 		}
 
-		request.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+		request.Header.Set("Content-Type", "application/json+protobuf")
+		request.Header.Set("X-Goog-API-Key", googleTranslateAPIKey)
 
 		body, err := sendTranslationRequest(&http.Client{Timeout: cfg.timeout}, request)
 		if err != nil {
 			return "", err
 		}
 
-		var response struct {
-			Sentences []struct {
-				Translation string `json:"trans"`
-			} `json:"sentences"`
-		}
-
+		var response [][]string
 		if err := json.Unmarshal(body, &response); err != nil {
 			return "", fmt.Errorf("parse Google translation response: %w", err)
 		}
 
-		var builder strings.Builder
-		for _, sentence := range response.Sentences {
-			builder.WriteString(sentence.Translation)
-		}
-
-		if builder.Len() == 0 {
+		if len(response) == 0 || len(response[0]) == 0 || response[0][0] == "" {
 			return "", errors.New("google translation response contains no data")
 		}
 
-		return builder.String(), nil
+		return html.UnescapeString(response[0][0]), nil
 	})
 }
 
-// translateMicrosoft calls the Azure Translator endpoint used by the referenced read-frog implementation.
+// translateMicrosoft calls the unauthenticated Microsoft Edge endpoint used by the referenced read-frog implementation.
 func translateMicrosoft(ctx context.Context, source string, cfg translateConfig) (string, error) {
 	return translateChunks(source, microsoftMaxChunkRunes, func(chunk string) (string, error) {
 		endpoint, err := url.Parse(cfg.endpoint)
@@ -358,15 +327,13 @@ func translateMicrosoft(ctx context.Context, source string, cfg translateConfig)
 		}
 
 		query := endpoint.Query()
-		query.Set("api-version", "3.0")
-		query.Set("from", "auto-detect")
+		query.Set("from", "")
 		query.Set("to", "zh-Hant")
+		query.Set("isEnterpriseClient", "false")
 
 		endpoint.RawQuery = query.Encode()
 
-		payload, err := json.Marshal([]struct {
-			Text string `json:"Text"`
-		}{{Text: chunk}})
+		payload, err := json.Marshal([]string{html.EscapeString(chunk)})
 		if err != nil {
 			return "", fmt.Errorf("marshal Microsoft translation request: %w", err)
 		}
@@ -376,9 +343,7 @@ func translateMicrosoft(ctx context.Context, source string, cfg translateConfig)
 			return "", fmt.Errorf("build Microsoft translation request: %w", err)
 		}
 
-		request.Header.Set("Content-Type", "application/json; charset=UTF-8")
-		request.Header.Set("Ocp-Apim-Subscription-Key", cfg.microsoftKey)
-		request.Header.Set("Ocp-Apim-Subscription-Region", cfg.microsoftRegion)
+		request.Header.Set("Content-Type", "application/json")
 
 		body, err := sendTranslationRequest(&http.Client{Timeout: cfg.timeout}, request)
 		if err != nil {
@@ -399,7 +364,7 @@ func translateMicrosoft(ctx context.Context, source string, cfg translateConfig)
 			return "", errors.New("microsoft translation response contains no data")
 		}
 
-		return response[0].Translations[0].Text, nil
+		return html.UnescapeString(response[0].Translations[0].Text), nil
 	})
 }
 

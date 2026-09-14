@@ -13,8 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   configurable DeepLX-compatible endpoint and print bilingual source and
   Traditional Chinese output (`table` or `json`).
 - `translate-file --provider`: select DeepLX, Google Translate, or Microsoft
-  Azure Translator. Google uses the public endpoint; Microsoft reads its
-  subscription key and region only from environment variables.
+  Translator. Google and Microsoft use the same public endpoints as the
+  read-frog project and require no API keys or configuration.
 
 ## [0.3.0] - 2026-09-14
 

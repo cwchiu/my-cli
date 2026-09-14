@@ -284,7 +284,7 @@ the source and Traditional Chinese translation as a bilingual pair.
 $ my-cli translate-file article.txt
 $ my-cli translate-file article.txt --endpoint http://localhost:1188/translate
 $ my-cli translate-file article.txt --provider google
-$ MICROSOFT_TRANSLATE_KEY=... MICROSOFT_TRANSLATE_REGION=westus my-cli translate-file article.txt --provider microsoft
+$ my-cli translate-file article.txt --provider microsoft
 $ my-cli translate-file article.txt --output json
 ```
 
@@ -296,10 +296,17 @@ $ my-cli translate-file article.txt --output json
 | `--output, -o` | Output format: `table|json` (default `table`).                          |
 
 The default DeepLX endpoint is local (`http://localhost:1188/translate`), so a
-DeepLX service must be running separately. Google uses its public translation
-endpoint without credentials. Microsoft uses the Azure Translator endpoint and
-requires `MICROSOFT_TRANSLATE_KEY` and `MICROSOFT_TRANSLATE_REGION`; credentials
-are intentionally accepted only through environment variables, not flags.
+DeepLX service must be running separately. The `google` and `microsoft`
+providers use the same public endpoints as the [read-frog](https://github.com/mengxi-ream/read-frog)
+project and require **no API keys or configuration**:
+
+- `google` — POST `translate-pa.googleapis.com/v1/translateHtml` with the
+  public browser API key read-frog embeds in its open-source code.
+- `microsoft` — POST `edge.microsoft.com/translate/translatetext`, which is
+  unauthenticated.
+
+Both providers escape HTML-sensitive characters before sending and decode HTML
+entities in the response, matching read-frog's behavior.
 
 Output is written to stdout, so `--output json` can be piped to another program.
 
