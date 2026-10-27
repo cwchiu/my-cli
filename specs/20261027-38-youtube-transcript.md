@@ -39,7 +39,8 @@ Source GitHub Issue #38: add a command to retrieve YouTube transcripts, followin
 - `cmd/my-cli/root.go`：註冊 `youtube-transcript` 子命令。
 - `README.md`、`CHANGELOG.md`：新增命令文件及 Unreleased 條目。
 - 本文件：記錄 Issue #38 的實作與驗證。
-- Commit / PR：尚未建立。
+- 功能 commit：`77b7303bce31428d8e27f85e0ac0d375e02127b3`。
+- PR：尚未建立。
 
 ## 驗證結果
 
