@@ -77,6 +77,7 @@ $ my-cli version -o json
 | `translate-file`     | Translate a text file to Traditional Chinese with DeepLX.           |
 | `markdown-to-html`   | Convert a Markdown file to an HTML fragment.                       |
 | `pdf-to-markdown`    | Extract PDF text as Markdown.                                       |
+| `youtube-transcript` | Fetch a YouTube video's transcript with timestamps.                |
 
 Global flags:
 
@@ -323,6 +324,31 @@ emits an array of `{source, translation}` pairs, one per paragraph.
 Output is written to stdout, so `--output json` can be piped to another program.
 
 Run `my-cli translate-file --help` for the full reference.
+
+### youtube-transcript
+
+Fetches caption segments from a YouTube video URL and writes each segment with
+its start timestamp. If the requested language is unavailable, the command
+falls back to English and then the first available caption language.
+
+```console
+$ my-cli youtube-transcript https://www.youtube.com/watch?v=dQw4w9WgXcQ
+[00:00:01.200] Example transcript segment
+
+$ my-cli youtube-transcript https://youtu.be/dQw4w9WgXcQ --lang zh-Hant
+$ my-cli youtube-transcript https://youtu.be/dQw4w9WgXcQ --output json
+```
+
+| Flag           | Description                                  |
+| -------------- | -------------------------------------------- |
+| `--lang`       | Preferred caption language (default `en`).   |
+| `--timeout`    | Total request timeout (default `30s`).        |
+| `--output, -o` | Output format: `text|json` (default `text`).  |
+
+JSON output includes transcript text and timing for each segment, the requested
+and selected languages, and the available caption languages.
+
+Run `my-cli youtube-transcript --help` for the full reference.
 
 ### Exit codes
 
