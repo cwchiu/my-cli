@@ -59,6 +59,7 @@ Run "my-cli <command> --help" for details on a specific command.`,
 	rootCmd.AddCommand(newTranslateFileCmd())
 	rootCmd.AddCommand(newMarkdownToHTMLCmd())
 	rootCmd.AddCommand(newPDFToMarkdownCmd())
+	rootCmd.AddCommand(newYouTubeTranscriptCmd())
 
 	return rootCmd
 }
