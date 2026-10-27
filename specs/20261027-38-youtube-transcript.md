@@ -40,7 +40,7 @@ Source GitHub Issue #38: add a command to retrieve YouTube transcripts, followin
 - `README.md`、`CHANGELOG.md`：新增命令文件及 Unreleased 條目。
 - 本文件：記錄 Issue #38 的實作與驗證。
 - 功能 commit：`77b7303bce31428d8e27f85e0ac0d375e02127b3`。
-- PR：尚未建立。
+- PR：[#39](https://github.com/cwchiu/my-cli/pull/39)。
 
 ## 驗證結果
 
@@ -52,3 +52,4 @@ Source GitHub Issue #38: add a command to retrieve YouTube transcripts, followin
 - `go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run`：Go 1.27.3 下通過，0 issues；此版本僅供本次驗證，未更動專案工具設定。
 - `go run golang.org/x/vuln/cmd/govulncheck@latest ./...`：未發現漏洞。
 - `go run github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.5.1 scan --lockfile=go.mod`：掃描 300 個套件，0 個受已知漏洞影響。
+- PR #39 checks：Lint、CodeQL、gosec、govulncheck、OSV Scanner、gitleaks、Go 1.26 與 stable 測試全數通過。
