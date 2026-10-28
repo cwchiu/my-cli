@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -115,58 +114,17 @@ func TestSelectYouTubeLanguage(t *testing.T) {
 	}
 }
 
-func TestBuildYouTubeTranscriptParams(t *testing.T) {
-	t.Parallel()
-
-	params := buildYouTubeTranscriptParams("dQw4w9WgXcQ", youtubeTestLanguageHant)
-
-	decoded, err := base64.StdEncoding.DecodeString(params)
-	if err != nil {
-		t.Fatalf("decode transcript params: %v", err)
-	}
-
-	assertContains(t, string(decoded), "dQw4w9WgXcQ")
-	assertContains(t, string(decoded), "engagement-panel-searchable-transcript-search-panel")
-}
-
 func TestYouTubeTranscriptCmd(t *testing.T) {
 	t.Parallel()
 
 	const videoID = "dQw4w9WgXcQ"
 
-	const transcriptResponse = `{
-  "actions": [{
-    "updateEngagementPanelAction": {
-      "content": {
-        "transcriptRenderer": {
-          "content": {
-            "transcriptSearchPanelRenderer": {
-              "body": {
-                "transcriptSegmentListRenderer": {
-                  "initialSegments": [
-                    {
-                      "transcriptSegmentRenderer": {
-                        "startMs": "1200",
-                        "endMs": "2400",
-                        "snippet": {"runs": [{"text": "Hello world"}]}
-                      }
-                    },
-                    {
-                      "transcriptSegmentRenderer": {
-                        "startMs": 2400,
-                        "endMs": 3600,
-                        "snippet": {"elementsAttributedString": {"content": "Next line"}}
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }]
+	const captionResponse = `{
+  "events": [
+    {"tStartMs": 1200, "dDurationMs": 1200, "segs": [{"utf8": "Hello"}, {"utf8": " world"}]},
+    {"tStartMs": 2400, "dDurationMs": 1200, "segs": [{"utf8": "Next line"}]},
+    {"tStartMs": 3600, "dDurationMs": 1200, "segs": [{"utf8": "\n"}]}
+  ]
 }`
 
 	tests := []struct {
@@ -196,11 +154,11 @@ func TestYouTubeTranscriptCmd(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			server := newYouTubeTranscriptTestServer(t, videoID, transcriptResponse)
+			server := newYouTubeTranscriptTestServer(t, videoID, captionResponse)
 
 			command := newYouTubeTranscriptCmdWithEndpoints(youtubeEndpoints{
-				pageURL:       server.URL + "/watch",
-				transcriptURL: server.URL + "/transcript",
+				pageURL:   server.URL + "/watch",
+				playerURL: server.URL + "/player",
 			})
 
 			output := new(strings.Builder)
@@ -228,55 +186,32 @@ func TestYouTubeTranscriptCmd(t *testing.T) {
 func newYouTubeTranscriptTestServer(
 	t *testing.T,
 	videoID string,
-	transcriptResponse string,
+	captionResponse string,
 ) *httptest.Server {
 	t.Helper()
 
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	var server *httptest.Server
+
+	server = httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
 		case "/watch":
-			if request.Method != http.MethodGet {
-				t.Errorf("watch request method = %q, want GET", request.Method)
+			pageResponse := map[string]any{
+				"captionTracks": testYouTubeCaptionTracks(server.URL),
 			}
+			writeYouTubeTestJSON(t, writer, pageResponse)
+		case "/player":
+			assertYouTubePlayerRequest(t, request, videoID)
 
-			if got := request.URL.Query().Get("v"); got != videoID {
-				t.Errorf("video ID query = %q, want %q", got, videoID)
-			}
+			var response youtubePlayerResponse
 
-			pageResponse := `{
-  "visitorData":"visitor",
-  "captionTracks": [
-    {"languageCode": "en", "name": {"simpleText": "English"}},
-    {"languageCode": "zh-Hant", "name": {"simpleText": "繁體中文"}}
-  ]
-}`
-			if _, err := writer.Write([]byte(pageResponse)); err != nil {
-				t.Errorf("write video page: %v", err)
-			}
-		case "/transcript":
-			if request.Method != http.MethodPost {
-				t.Errorf("transcript request method = %q, want POST", request.Method)
-			}
+			captionTracks := testYouTubeCaptionTracks(server.URL)
+			response.Captions.PlayerCaptionsTracklistRenderer.CaptionTracks = captionTracks
+			writeYouTubeTestJSON(t, writer, response)
+		case "/captions":
+			assertYouTubeCaptionRequest(t, request)
 
-			if got := request.Header.Get("Content-Type"); got != "application/json" {
-				t.Errorf("content type = %q, want application/json", got)
-			}
-
-			var payload struct {
-				Context struct {
-					Client struct {
-						ClientName string `json:"clientName"`
-					} `json:"client"`
-				} `json:"context"`
-			}
-			if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
-				t.Errorf("decode transcript request: %v", err)
-			} else if payload.Context.Client.ClientName != "ANDROID" {
-				t.Errorf("client name = %q, want ANDROID", payload.Context.Client.ClientName)
-			}
-
-			if _, err := writer.Write([]byte(transcriptResponse)); err != nil {
-				t.Errorf("write transcript response: %v", err)
+			if _, err := writer.Write([]byte(captionResponse)); err != nil {
+				t.Errorf("write caption response: %v", err)
 			}
 		default:
 			http.NotFound(writer, request)
@@ -287,24 +222,65 @@ func newYouTubeTranscriptTestServer(
 	return server
 }
 
-func TestDoYouTubeRequestRejectsHTTPError(t *testing.T) {
-	t.Parallel()
-
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
-		writer.WriteHeader(http.StatusForbidden)
-	}))
-	defer server.Close()
-
-	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, nil)
-	if err != nil {
-		t.Fatal(err)
+func testYouTubeCaptionTracks(origin string) []youtubeRawCaptionTrack {
+	return []youtubeRawCaptionTrack{
+		{BaseURL: origin + "/captions?lang=en", LanguageCode: "en", Kind: "asr"},
+		{BaseURL: origin + "/captions?lang=zh-Hant", LanguageCode: "zh-Hant"},
 	}
-
-	_, err = doYouTubeRequest(server.Client(), request)
-	requireErrorContains(t, err, "request returned status 403")
 }
 
-func TestParseYouTubeTranscriptResponseErrors(t *testing.T) {
+func writeYouTubeTestJSON(t *testing.T, writer http.ResponseWriter, response any) {
+	t.Helper()
+
+	if err := json.NewEncoder(writer).Encode(response); err != nil {
+		t.Errorf("write JSON test response: %v", err)
+	}
+}
+
+func assertYouTubePlayerRequest(t *testing.T, request *http.Request, videoID string) {
+	t.Helper()
+
+	if request.Method != http.MethodPost {
+		t.Errorf("player request method = %q, want POST", request.Method)
+	}
+
+	if got := request.Header.Get("Content-Type"); got != "application/json" {
+		t.Errorf("content type = %q, want application/json", got)
+	}
+
+	var payload youtubePlayerRequest
+	if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+		t.Errorf("decode player request: %v", err)
+
+		return
+	}
+
+	if payload.Context.Client.ClientName != "ANDROID" {
+		t.Errorf("client name = %q, want ANDROID", payload.Context.Client.ClientName)
+	}
+
+	if payload.Context.Client.ClientVersion != youtubeAndroidClientVersion {
+		t.Errorf("client version = %q, want %q", payload.Context.Client.ClientVersion, youtubeAndroidClientVersion)
+	}
+
+	if payload.VideoID != videoID {
+		t.Errorf("player request video ID = %q, want %q", payload.VideoID, videoID)
+	}
+}
+
+func assertYouTubeCaptionRequest(t *testing.T, request *http.Request) {
+	t.Helper()
+
+	if request.Method != http.MethodGet {
+		t.Errorf("caption request method = %q, want GET", request.Method)
+	}
+
+	if got := request.URL.Query().Get("fmt"); got != "json3" {
+		t.Errorf("caption format = %q, want json3", got)
+	}
+}
+
+func TestDoYouTubeRequestRejectsHTTPError(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -313,19 +289,14 @@ func TestParseYouTubeTranscriptResponseErrors(t *testing.T) {
 		wantErrPart string
 	}{
 		{
-			name:        "invalid JSON",
-			body:        `{`,
-			wantErrPart: "decode youtube transcript response",
+			name:        "includes bounded API error detail",
+			body:        `{"error":{"message":"invalid transcript request"}}`,
+			wantErrPart: "invalid transcript request",
 		},
 		{
-			name:        "API error",
-			body:        `{"error":{"code":400,"message":"Bad request"}}`,
-			wantErrPart: "youtube transcript api error",
-		},
-		{
-			name:        "no transcript",
-			body:        `{"actions":[]}`,
-			wantErrPart: "no transcript available",
+			name:        "truncates oversized error detail",
+			body:        strings.Repeat("x", maxYouTubeErrorBodyPreview+20),
+			wantErrPart: "...",
 		},
 	}
 
@@ -333,10 +304,144 @@ func TestParseYouTubeTranscriptResponseErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := parseYouTubeTranscriptResponse([]byte(tt.body), "en", "en", []youtubeCaptionTrack{})
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+				writer.WriteHeader(http.StatusBadRequest)
+
+				if _, err := writer.Write([]byte(tt.body)); err != nil {
+					t.Errorf("write error response: %v", err)
+				}
+			}))
+			t.Cleanup(server.Close)
+
+			request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			_, err = doYouTubeRequest(server.Client(), request)
+			requireErrorContains(t, err, "request returned status 400")
 			requireErrorContains(t, err, tt.wantErrPart)
+
+			if tt.name == "truncates oversized error detail" &&
+				len(err.Error()) > len("request returned status 400: \"\"...")+maxYouTubeErrorBodyPreview {
+				t.Errorf("error message was not bounded: got %d bytes", len(err.Error()))
+			}
 		})
 	}
+}
+
+func TestFetchYouTubeCaptionTracksFallsBackToIOS(t *testing.T) {
+	t.Parallel()
+
+	var clients []string
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		var payload youtubePlayerRequest
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			t.Errorf("decode player request: %v", err)
+		}
+
+		clients = append(clients, payload.Context.Client.ClientName)
+
+		if payload.Context.Client.ClientName == "ANDROID" {
+			writer.WriteHeader(http.StatusBadRequest)
+
+			return
+		}
+
+		var response youtubePlayerResponse
+
+		response.Captions.PlayerCaptionsTracklistRenderer.CaptionTracks = []youtubeRawCaptionTrack{
+			{BaseURL: "http://" + request.Host + "/captions", LanguageCode: "en"},
+		}
+		writeYouTubeTestJSON(t, writer, response)
+	}))
+	t.Cleanup(server.Close)
+
+	tracks, err := fetchYouTubeCaptionTracks(
+		t.Context(),
+		server.Client(),
+		"dQw4w9WgXcQ",
+		youtubeEndpoints{playerURL: server.URL + "/player", pageURL: server.URL + "/watch"},
+	)
+	if err != nil {
+		t.Fatalf("fetch caption tracks: %v", err)
+	}
+
+	if len(tracks) != 1 || tracks[0].LanguageCode != "en" {
+		t.Fatalf("caption tracks = %#v, want one English track", tracks)
+	}
+
+	if strings.Join(clients, ",") != "ANDROID,IOS" {
+		t.Errorf("player clients = %v, want Android then iOS", clients)
+	}
+}
+
+func TestFetchYouTubeCaptionTracksFallsBackToWatchPage(t *testing.T) {
+	t.Parallel()
+
+	var server *httptest.Server
+
+	server = httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/player":
+			writer.WriteHeader(http.StatusBadRequest)
+		case "/watch":
+			pageResponse := map[string]any{
+				"captionTracks": testYouTubeCaptionTracks(server.URL),
+			}
+			writeYouTubeTestJSON(t, writer, pageResponse)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	tracks, err := fetchYouTubeCaptionTracks(
+		t.Context(),
+		server.Client(),
+		"dQw4w9WgXcQ",
+		youtubeEndpoints{playerURL: server.URL + "/player", pageURL: server.URL + "/watch"},
+	)
+	if err != nil {
+		t.Fatalf("fetch caption tracks: %v", err)
+	}
+
+	if len(tracks) != 2 || tracks[0].LanguageCode != "en" {
+		t.Fatalf("caption tracks = %#v, want English and zh-Hant tracks", tracks)
+	}
+}
+
+func TestFetchYouTubeCaptionLinesRejectsForeignOrigin(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.NotFoundHandler())
+	t.Cleanup(server.Close)
+
+	_, err := fetchYouTubeCaptionLines(
+		t.Context(),
+		server.Client(),
+		youtubeRawCaptionTrack{BaseURL: "https://example.com/captions"},
+		server.URL+"/player",
+	)
+	requireErrorContains(t, err, "does not match the player origin")
+}
+
+func TestFetchYouTubeCaptionLinesRejectsInvalidJSON(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		if _, err := writer.Write([]byte("{")); err != nil {
+			t.Errorf("write invalid caption response: %v", err)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	_, err := fetchYouTubeCaptionLines(
+		t.Context(),
+		server.Client(),
+		youtubeRawCaptionTrack{BaseURL: server.URL + "/captions"},
+		server.URL+"/player",
+	)
+	requireErrorContains(t, err, "decode youtube captions")
 }
 
 func TestResolveYouTubeTranscriptConfig(t *testing.T) {
