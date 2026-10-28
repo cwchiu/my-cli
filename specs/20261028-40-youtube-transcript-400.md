@@ -36,7 +36,7 @@ Source GitHub Issue #40: a real request for a public video returned HTTP 400 eve
 
 - `cmd/my-cli/youtube_transcript.go`：以 Android/iOS player API 及字幕軌 JSON3 下載取代舊 `get_transcript` API；增加 watch-page fallback、字幕解析與 origin 驗證。
 - `cmd/my-cli/youtube_transcript_test.go`：更新 CLI fixture，涵蓋 JSON3、iOS/watch-page fallback、HTTP error diagnostics 及 origin 驗證。
-- Commit：待提交，先供使用者在本機驗證；未建立 PR、未合併。
+- Commit：`ee2f2af2ce954c80d8fb586fa15a51d1d54dc0ed`；分支尚未推送，未建立 PR、未合併。
 
 ## 驗證結果
 
