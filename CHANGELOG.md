@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add `youtube-transcript` to fetch YouTube captions with timestamps.
+
 ## [0.4.0] - 2026-09-15
 
 ### Added
