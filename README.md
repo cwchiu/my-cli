@@ -33,7 +33,7 @@ $ my-cli version --output json
 
 ### Requirements
 
-- Go **1.26** or later (see `go.mod` for the exact `go`/`toolchain` directives)
+- Go **1.26.9** or later (see `go.mod` for the minimum version)
 - [Task](https://taskfile.dev) (optional but recommended — cross-platform task runner)
 
 ### Install
