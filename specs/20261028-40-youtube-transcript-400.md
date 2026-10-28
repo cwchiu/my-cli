@@ -36,7 +36,7 @@ Source GitHub Issue #40: a real request for a public video returned HTTP 400 eve
 
 - `cmd/my-cli/youtube_transcript.go`：以 Android/iOS player API 及字幕軌 JSON3 下載取代舊 `get_transcript` API；增加 watch-page fallback、字幕解析與 origin 驗證。
 - `cmd/my-cli/youtube_transcript_test.go`：更新 CLI fixture，涵蓋 JSON3、iOS/watch-page fallback、HTTP error diagnostics 及 origin 驗證。
-- Commit：`ee2f2af2ce954c80d8fb586fa15a51d1d54dc0ed`；分支尚未推送，未建立 PR、未合併。
+- Commit：`ee2f2af2ce954c80d8fb586fa15a51d1d54dc0ed`；PR 以獨立的依賴修復分支 #42 為基底，待審核後再合併。
 
 ## 驗證結果
 
@@ -45,8 +45,8 @@ Source GitHub Issue #40: a real request for a public video returned HTTP 400 eve
 - `go test -shuffle=on ./...`: 通過。
 - golangci-lint v2.15.0 `run`: `0 issues`。
 - `govulncheck ./...`: `No vulnerabilities found.`
-- OSV：未通過；回報既有 go-jose v4.1.4 的 1 項 High 漏洞（fixed v4.1.6）。
+- 原始 OSV 掃描回報既有 go-jose v4.1.4 的 1 項 High 漏洞；疊加 #42 的 v4.1.6 修復後，OSV 掃描為 0 漏洞，govulncheck 亦通過。
 - gosec v2.29.0：指令 exit 0，但部分套件因 Go 1.27.3 型別資訊錯誤跳過 SSA 分析，不能視為完整掃描通過。
 - 實際 CLI 對 `eHS0WIWNtu0` 成功取得 1,332 行英文字幕；對 `dQw4w9WgXcQ` 成功取得 61 行英文字幕。
 - 以預設文字輸出再次執行 `eHS0WIWNtu0`：1,332 行，首行 `[00:00:00.000] Welcome to this beginner-friendly Claude`，末行 `[00:56:49.320] for watching.`。
-- 使用者本機驗證及 commit / PR / merge 尚待處理；不會在使用者驗證前合併。
+- 使用者確認本機驗證通過；PR 尚待使用者審核，不會自行合併。
