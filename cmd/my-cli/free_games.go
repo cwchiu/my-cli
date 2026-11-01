@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/csv"
 	"encoding/json"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -44,24 +46,80 @@ const (
 	platformSteam   = "steam"
 	platformEpic    = "epic"
 	platformAndroid = "android"
+	platformGOG     = "gog"
+	platformItch    = "itch"
+	platformDRMFree = "drm-free"
 )
 
 // freeGamePlatformOrder is the deterministic order of platform selectors,
 // used for the default (all platforms) and shell completion.
-var freeGamePlatformOrder = []string{platformSteam, platformEpic, platformAndroid}
+var freeGamePlatformOrder = []string{
+	platformSteam, platformEpic, platformGOG, platformItch, platformDRMFree, platformAndroid,
+}
 
 // freeGamePlatformLabels maps a --platform selector to the exact platform
-// token matched (as a substring) inside the API's platforms field.
+// token matched (as a substring) inside the API's platforms field. The tokens
+// are taken verbatim from the live API (see spec); none is a substring of
+// another, so substring matching cannot produce false positives.
 var freeGamePlatformLabels = map[string]string{
 	platformSteam:   "Steam",
 	platformEpic:    "Epic Games Store",
 	platformAndroid: "Android",
+	platformGOG:     "GOG",
+	platformItch:    "Itch.io",
+	platformDRMFree: "DRM-Free",
 }
+
+// Giveaway type selectors accepted by --type, mapped to the exact type token
+// the API uses. freeGameTypeAll disables type filtering.
+const (
+	freeGameTypeAll         = "all"
+	freeGameTypeDLC         = "dlc"
+	freeGameTypeEarlyAccess = "early-access"
+	freeGameTypeOther       = "other"
+)
+
+// freeGameTypeOrder is the deterministic order of type selectors, used for
+// shell completion.
+var freeGameTypeOrder = []string{
+	freeGameTypeGame, freeGameTypeDLC, freeGameTypeEarlyAccess, freeGameTypeOther, freeGameTypeAll,
+}
+
+// freeGameTypeLabels maps a --type selector to the exact type token in the
+// API response.
+var freeGameTypeLabels = map[string]string{
+	freeGameTypeGame:        "Game",
+	freeGameTypeDLC:         "DLC",
+	freeGameTypeEarlyAccess: "Early Access",
+	freeGameTypeOther:       "Other",
+}
+
+// Sort keys accepted by --sort.
+const (
+	freeGameSortEnd       = "end"
+	freeGameSortWorth     = "worth"
+	freeGameSortPublished = "published"
+	freeGameSortTitle     = "title"
+)
+
+// freeGameSortOrder is the deterministic order of sort keys, used for shell
+// completion.
+var freeGameSortOrder = []string{
+	freeGameSortEnd, freeGameSortWorth, freeGameSortPublished, freeGameSortTitle,
+}
+
+// freeGameDescriptionWidth caps the description column in table output so a
+// long blurb cannot blow up the layout; --output json keeps the full text.
+const freeGameDescriptionWidth = 80
 
 // freeGamesConfig holds the resolved settings for one free-games run.
 type freeGamesConfig struct {
 	baseURL      string
 	platforms    []string
+	types        []string
+	minWorth     float64
+	sortKey      string
+	details      bool
 	timeout      time.Duration
 	outputFormat string
 	outFile      string
@@ -74,14 +132,14 @@ func newFreeGamesCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "free-games",
-		Short: "Collect limited-time free game giveaways (Steam, Epic, Android)",
+		Short: "Collect limited-time free game giveaways (Steam, Epic, GOG, itch.io)",
 		Long: `Collect limited-time free game giveaways from the GamerPower API
 (https://www.gamerpower.com, no API token required).
 
-Giveaways are filtered to full games (type "Game") available on the
-selected platforms; giveaways whose end date has already passed are
-dropped. Results are sorted by end time, soonest first; giveaways
-without an end date sort last.
+Giveaways are filtered by type (default: full games) and by platform;
+giveaways whose end date has already passed are dropped. Results are
+sorted by end time, soonest first; giveaways without an end date sort
+last.
 
 A single request covers every platform: the API's comma-separated
 platform parameter is broken (it returns 404), so platform filtering
@@ -90,10 +148,15 @@ happens client-side.
 Output formats:
   table  human-readable summary (default)
   json   the untouched API entries, preserving every field
-  csv    a flat Title,Platforms,URL,Start,End table`,
+  csv    a flat Title,Platforms,Type,Worth,Users,URL,Start,End table
+
+Use --details to add worth, users, and a truncated description to the
+table output; --output json always carries the full text.`,
 		Example: `  my-cli free-games
   my-cli free-games --platform steam,epic
-  my-cli free-games -p android --output csv -O free.csv`,
+  my-cli free-games -p gog --details
+  my-cli free-games --min-worth 10 --sort worth
+  my-cli free-games --type all -p android --output csv -O free.csv`,
 		Args: wrapUsage(cobra.NoArgs),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			// Flag validation failures are usage errors (exit code 2).
@@ -110,7 +173,7 @@ Output formats:
 				return err
 			}
 
-			games := collectFreeGames(entries, cfg.platforms, time.Now())
+			games := collectFreeGames(entries, cfg, time.Now())
 
 			out := cmd.OutOrStdout()
 
@@ -127,14 +190,24 @@ Output formats:
 				out = f
 			}
 
-			return renderFreeGames(out, cfg.outputFormat, games)
+			return renderFreeGames(out, cfg, games)
 		},
 	}
 
 	cmd.Flags().StringVar(&raw.baseURL, "base-url", defaultFreeGamesBaseURL,
 		"GamerPower API base URL (override for testing)")
 	cmd.Flags().StringSliceVarP(&raw.platforms, "platform", "p", nil,
-		"platforms to include: steam|epic|android, repeatable or comma-separated (default: all)")
+		"platforms to include: steam|epic|gog|itch|drm-free|android, "+
+			"repeatable or comma-separated (default: all)")
+	cmd.Flags().StringSliceVarP(&raw.types, "type", "t", nil,
+		"giveaway types to include: game|dlc|early-access|other|all, "+
+			"repeatable or comma-separated (default: game)")
+	cmd.Flags().Float64Var(&raw.minWorth, "min-worth", 0,
+		"only keep giveaways worth at least this many USD (N/A counts as 0)")
+	cmd.Flags().StringVar(&raw.sortKey, "sort", freeGameSortEnd,
+		"sort order (end|worth|published|title)")
+	cmd.Flags().BoolVar(&raw.details, "details", false,
+		"add worth, users, and description columns to the table output")
 	cmd.Flags().DurationVar(&raw.timeout, "timeout", defaultFreeGamesTimeout,
 		"request timeout")
 	cmd.Flags().StringVarP(&raw.outputFormat, "output", "o", outputFormatTable,
@@ -154,6 +227,18 @@ Output formats:
 		return freeGamePlatformOrder, cobra.ShellCompDirectiveNoFileComp
 	})
 
+	_ = cmd.RegisterFlagCompletionFunc("type", func(
+		_ *cobra.Command, _ []string, _ string,
+	) ([]string, cobra.ShellCompDirective) {
+		return freeGameTypeOrder, cobra.ShellCompDirectiveNoFileComp
+	})
+
+	_ = cmd.RegisterFlagCompletionFunc("sort", func(
+		_ *cobra.Command, _ []string, _ string,
+	) ([]string, cobra.ShellCompDirective) {
+		return freeGameSortOrder, cobra.ShellCompDirectiveNoFileComp
+	})
+
 	return cmd
 }
 
@@ -170,7 +255,23 @@ func resolveFreeGamesConfig(raw freeGamesConfig) (freeGamesConfig, error) {
 		return freeGamesConfig{}, fmt.Errorf("unsupported output format %q", raw.outputFormat)
 	}
 
+	if raw.minWorth < 0 {
+		return freeGamesConfig{}, fmt.Errorf("min-worth must not be negative, got %g", raw.minWorth)
+	}
+
+	if !slices.Contains(freeGameSortOrder, raw.sortKey) {
+		return freeGamesConfig{}, fmt.Errorf(
+			"unsupported sort %q (want %s)",
+			raw.sortKey, strings.Join(freeGameSortOrder, ", "),
+		)
+	}
+
 	platforms, err := normalizeFreeGamePlatforms(raw.platforms)
+	if err != nil {
+		return freeGamesConfig{}, err
+	}
+
+	types, err := normalizeFreeGameTypes(raw.types)
 	if err != nil {
 		return freeGamesConfig{}, err
 	}
@@ -178,6 +279,10 @@ func resolveFreeGamesConfig(raw freeGamesConfig) (freeGamesConfig, error) {
 	return freeGamesConfig{
 		baseURL:      strings.TrimRight(raw.baseURL, "/"),
 		platforms:    platforms,
+		types:        types,
+		minWorth:     raw.minWorth,
+		sortKey:      raw.sortKey,
+		details:      raw.details,
 		timeout:      raw.timeout,
 		outputFormat: raw.outputFormat,
 		outFile:      raw.outFile,
@@ -216,6 +321,43 @@ func normalizeFreeGamePlatforms(selectors []string) ([]string, error) {
 	return normalized, nil
 }
 
+// normalizeFreeGameTypes lowercases the selected types, drops duplicates, and
+// rejects unknown selectors. An empty selection means full games only, which
+// is the historical behaviour of the command. Selecting "all" disables type
+// filtering entirely.
+func normalizeFreeGameTypes(selectors []string) ([]string, error) {
+	if len(selectors) == 0 {
+		return []string{freeGameTypeGame}, nil
+	}
+
+	seen := make(map[string]struct{}, len(selectors))
+	normalized := make([]string, 0, len(selectors))
+
+	for _, selector := range selectors {
+		key := strings.ToLower(strings.TrimSpace(selector))
+
+		if key == freeGameTypeAll {
+			return []string{freeGameTypeAll}, nil
+		}
+
+		if _, ok := freeGameTypeLabels[key]; !ok {
+			return nil, fmt.Errorf(
+				"unsupported type %q (want %s)",
+				selector, strings.Join(freeGameTypeOrder, ", "),
+			)
+		}
+
+		if _, dup := seen[key]; dup {
+			continue
+		}
+
+		seen[key] = struct{}{}
+		normalized = append(normalized, key)
+	}
+
+	return normalized, nil
+}
+
 // gamerPowerErrorBody mirrors the error envelope returned by the GamerPower
 // API on failures such as an unknown platform parameter:
 // {"status":0,"status_message":"No category found, ..."}.
@@ -231,7 +373,14 @@ type freeGameEntry struct {
 	Title           string `json:"title"`
 	Type            string `json:"type"`
 	Platforms       string `json:"platforms"`
+	Worth           string `json:"worth"`
+	Description     string `json:"description"`
+	Instructions    string `json:"instructions"`
+	Thumbnail       string `json:"thumbnail"`
+	Image           string `json:"image"`
+	Users           int    `json:"users"`
 	OpenGiveawayURL string `json:"open_giveaway_url"`
+	GamerPowerURL   string `json:"gamerpower_url"`
 	PublishedDate   string `json:"published_date"`
 	EndDate         string `json:"end_date"`
 }
@@ -239,14 +388,23 @@ type freeGameEntry struct {
 // freeGame is one rendered giveaway row. raw preserves the untouched API
 // entry for lossless JSON output.
 type freeGame struct {
-	raw       json.RawMessage
-	title     string
-	platforms string
-	url       string
-	start     string
-	end       string
-	endTime   time.Time
-	hasEnd    bool
+	raw         json.RawMessage
+	title       string
+	gameType    string
+	platforms   string
+	worth       string
+	worthValue  float64
+	hasWorth    bool
+	description string
+	users       int
+	url         string
+	gamerPower  string
+	start       string
+	end         string
+	startTime   time.Time
+	hasStart    bool
+	endTime     time.Time
+	hasEnd      bool
 }
 
 // fetchFreeGameEntries performs the GET against the GamerPower giveaways
@@ -304,11 +462,11 @@ func freeGamesHTTPError(endpoint string, status int, body []byte) error {
 		endpoint, status, truncateDetail(body))
 }
 
-// collectFreeGames filters the raw API entries to full games on the selected
-// platforms that have not expired yet, sorted by end time (soonest first, no
-// end date last, then title). Entries that do not decode are skipped: the
-// surrounding array is valid JSON, so a malformed member is API noise.
-func collectFreeGames(entries []json.RawMessage, platforms []string, now time.Time) []freeGame {
+// collectFreeGames filters the raw API entries to the selected types and
+// platforms that have not expired yet, then sorts them with the configured
+// key. Entries that do not decode are skipped: the surrounding array is valid
+// JSON, so a malformed member is API noise.
+func collectFreeGames(entries []json.RawMessage, cfg freeGamesConfig, now time.Time) []freeGame {
 	games := make([]freeGame, 0, len(entries))
 
 	for _, raw := range entries {
@@ -317,18 +475,26 @@ func collectFreeGames(entries []json.RawMessage, platforms []string, now time.Ti
 			continue
 		}
 
-		if entry.Type != freeGameTypeGame || !matchesFreeGamePlatforms(entry.Platforms, platforms) {
+		if !matchesFreeGameTypes(entry.Type, cfg.types) ||
+			!matchesFreeGamePlatforms(entry.Platforms, cfg.platforms) {
 			continue
 		}
 
 		game := freeGame{
-			raw:       raw,
-			title:     entry.Title,
-			platforms: entry.Platforms,
-			url:       entry.OpenGiveawayURL,
-			start:     entry.PublishedDate,
-			end:       entry.EndDate,
+			raw:         raw,
+			title:       entry.Title,
+			gameType:    entry.Type,
+			platforms:   entry.Platforms,
+			worth:       entry.Worth,
+			description: entry.Description,
+			users:       entry.Users,
+			url:         entry.OpenGiveawayURL,
+			gamerPower:  entry.GamerPowerURL,
+			start:       entry.PublishedDate,
+			end:         entry.EndDate,
 		}
+
+		game.worthValue, game.hasWorth = parseFreeGameWorth(entry.Worth)
 
 		// The API keeps expired giveaways listed as Active (some for
 		// years), so the expiry check happens here, client-side. An end
@@ -347,18 +513,65 @@ func collectFreeGames(entries []json.RawMessage, platforms []string, now time.Ti
 			game.hasEnd = true
 		}
 
+		if entry.PublishedDate != "" {
+			if start, err := time.Parse(freeGameDateLayout, entry.PublishedDate); err == nil {
+				game.startTime = start
+				game.hasStart = true
+			}
+		}
+
+		if game.worthValue < cfg.minWorth {
+			continue
+		}
+
 		games = append(games, game)
 	}
 
-	slices.SortFunc(games, compareFreeGames)
+	slices.SortFunc(games, freeGameComparator(cfg.sortKey))
 
 	return games
 }
 
+// parseFreeGameWorth converts the API's worth string ("$6.99", "$384.00", or
+// "N/A") into a comparable amount. The second result reports whether the
+// entry carries a real price; "N/A" and unparsable values report false and a
+// zero amount.
+func parseFreeGameWorth(worth string) (float64, bool) {
+	trimmed := strings.TrimSpace(worth)
+	if trimmed == "" || trimmed == freeGameNoEndDate {
+		return 0, false
+	}
+
+	trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "$"))
+
+	value, err := strconv.ParseFloat(trimmed, 64)
+	if err != nil {
+		return 0, false
+	}
+
+	return value, true
+}
+
+// matchesFreeGameTypes reports whether the entry's type is among the selected
+// types. Selecting "all" matches everything.
+func matchesFreeGameTypes(gameType string, selected []string) bool {
+	for _, key := range selected {
+		if key == freeGameTypeAll {
+			return true
+		}
+
+		if freeGameTypeLabels[key] == gameType {
+			return true
+		}
+	}
+
+	return false
+}
+
 // matchesFreeGamePlatforms reports whether the API's comma-separated
 // platforms field contains any of the selected platforms. Substring matching
-// is safe: no other platform name contains "Steam", "Epic Games Store", or
-// "Android" as a substring (verified against the live API, see spec).
+// is safe: no platform token is a substring of another (verified against the
+// live API, see spec).
 func matchesFreeGamePlatforms(platforms string, selected []string) bool {
 	for _, platform := range selected {
 		if strings.Contains(platforms, freeGamePlatformLabels[platform]) {
@@ -367,6 +580,44 @@ func matchesFreeGamePlatforms(platforms string, selected []string) bool {
 	}
 
 	return false
+}
+
+// freeGameComparator returns the ordering for the given --sort key. Every
+// ordering falls back to the title so the output is stable across runs.
+func freeGameComparator(sortKey string) func(a, b freeGame) int {
+	switch sortKey {
+	case freeGameSortWorth:
+		return func(a, b freeGame) int {
+			if c := cmp.Compare(b.worthValue, a.worthValue); c != 0 {
+				return c
+			}
+
+			return strings.Compare(a.title, b.title)
+		}
+	case freeGameSortPublished:
+		return func(a, b freeGame) int {
+			switch {
+			case a.hasStart && b.hasStart:
+				if c := b.startTime.Compare(a.startTime); c != 0 {
+					return c
+				}
+			case a.hasStart:
+				return -1
+			case b.hasStart:
+				return 1
+			}
+
+			return strings.Compare(a.title, b.title)
+		}
+	case freeGameSortTitle:
+		return func(a, b freeGame) int {
+			return strings.Compare(a.title, b.title)
+		}
+	case freeGameSortEnd:
+		return compareFreeGames
+	default:
+		return compareFreeGames
+	}
 }
 
 // compareFreeGames orders giveaways by end time ascending; giveaways without
@@ -387,31 +638,48 @@ func compareFreeGames(a, b freeGame) int {
 }
 
 // renderFreeGames writes the giveaways in the requested format.
-func renderFreeGames(out io.Writer, format string, games []freeGame) error {
-	switch format {
+func renderFreeGames(out io.Writer, cfg freeGamesConfig, games []freeGame) error {
+	switch cfg.outputFormat {
 	case outputFormatTable:
-		return renderFreeGamesTable(out, games)
+		return renderFreeGamesTable(out, games, cfg.details)
 	case outputFormatJSON:
 		return renderFreeGamesJSON(out, games)
 	case outputFormatCSV:
 		return renderFreeGamesCSV(out, games)
 	default:
-		return fmt.Errorf("unsupported output format %q", format)
+		return fmt.Errorf("unsupported output format %q", cfg.outputFormat)
 	}
 }
 
-// renderFreeGamesTable writes a human-readable summary of the giveaways.
-func renderFreeGamesTable(out io.Writer, games []freeGame) error {
+// renderFreeGamesTable writes a human-readable summary of the giveaways. With
+// details enabled it adds worth, users, and a truncated description.
+func renderFreeGamesTable(out io.Writer, games []freeGame, details bool) error {
 	w := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
 
-	if _, err := fmt.Fprintf(w, "TITLE\tPLATFORMS\tSTART\tEND\tURL\n"); err != nil {
+	header := "TITLE\tPLATFORMS\tSTART\tEND\tURL\n"
+	if details {
+		header = "TITLE\tTYPE\tPLATFORMS\tWORTH\tUSERS\tSTART\tEND\tDESCRIPTION\tURL\n"
+	}
+
+	if _, err := fmt.Fprint(w, header); err != nil {
 		return fmt.Errorf("print table header: %w", err)
 	}
 
 	for _, game := range games {
-		if _, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
-			game.title, game.platforms, game.start, game.end, game.url,
-		); err != nil {
+		var err error
+
+		if details {
+			_, err = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\t%s\t%s\t%s\t%s\n",
+				game.title, game.gameType, game.platforms, game.worth, game.users,
+				game.start, game.end, truncateFreeGameDescription(game.description), game.url,
+			)
+		} else {
+			_, err = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
+				game.title, game.platforms, game.start, game.end, game.url,
+			)
+		}
+
+		if err != nil {
 			return fmt.Errorf("print table row: %w", err)
 		}
 	}
@@ -423,8 +691,21 @@ func renderFreeGamesTable(out io.Writer, games []freeGame) error {
 	return nil
 }
 
+// truncateFreeGameDescription collapses the description to a single line and
+// caps it at freeGameDescriptionWidth runes so the table stays readable.
+func truncateFreeGameDescription(description string) string {
+	flat := strings.Join(strings.Fields(description), " ")
+
+	runes := []rune(flat)
+	if len(runes) <= freeGameDescriptionWidth {
+		return flat
+	}
+
+	return string(runes[:freeGameDescriptionWidth]) + "..."
+}
+
 // freeGamesCSVHeader is the fixed CSV schema of the free-games export.
-var freeGamesCSVHeader = []string{"Title", "Platforms", "URL", "Start", "End"}
+var freeGamesCSVHeader = []string{"Title", "Platforms", "Type", "Worth", "Users", "URL", "Start", "End"}
 
 // renderFreeGamesCSV writes the flat CSV export (RFC 4180 via encoding/csv).
 func renderFreeGamesCSV(out io.Writer, games []freeGame) error {
@@ -435,7 +716,16 @@ func renderFreeGamesCSV(out io.Writer, games []freeGame) error {
 	}
 
 	for _, game := range games {
-		row := []string{game.title, game.platforms, game.url, game.start, game.end}
+		row := []string{
+			game.title,
+			game.platforms,
+			game.gameType,
+			game.worth,
+			strconv.Itoa(game.users),
+			game.url,
+			game.start,
+			game.end,
+		}
 
 		if err := w.Write(row); err != nil {
 			return fmt.Errorf("write csv row: %w", err)
