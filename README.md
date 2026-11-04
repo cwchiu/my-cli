@@ -5,7 +5,7 @@
 [![Security](https://github.com/cwchiu/my-cli/actions/workflows/security.yml/badge.svg?branch=main)](https://github.com/cwchiu/my-cli/actions/workflows/security.yml?query=branch%3Amain)
 [![Secrets](https://github.com/cwchiu/my-cli/actions/workflows/secrets.yml/badge.svg?branch=main)](https://github.com/cwchiu/my-cli/actions/workflows/secrets.yml?query=branch%3Amain)
 ![Coverage](https://img.shields.io/badge/coverage-85.9%25-brightgreen)
-![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)
+![Go](https://img.shields.io/badge/Go-1.27-00ADD8?logo=go&logoColor=white)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 A multi-subcommand CLI tool built with [Cobra](https://github.com/spf13/cobra) and
@@ -33,7 +33,7 @@ $ my-cli version --output json
 
 ### Requirements
 
-- Go **1.26.9** or later (see `go.mod` for the minimum version)
+- Go **1.27.0** or later (see `go.mod` for the exact `go`/`toolchain` directives)
 - [Task](https://taskfile.dev) (optional but recommended — cross-platform task runner)
 
 ### Install

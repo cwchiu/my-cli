@@ -47,7 +47,7 @@ Before any Go coding, review, debugging, troubleshooting, or setup task, load th
 | 項目 | 決定 |
 |---|---|
 | 類型 | 多子命令 CLI 工具 |
-| 語言 | Go（使用最新 stable；新代碼直接採用 1.21–1.26 現代化特性） |
+| 語言 | Go（使用最新 stable；新代碼直接採用 1.21–1.27 現代化特性） |
 | 命令框架 | [spf13/cobra](https://github.com/spf13/cobra) |
 | 設定管理 | [spf13/viper](https://github.com/spf13/viper)（分層設定：flag > env > file > default） |
 | 日誌 | `log/slog`（結構化；正式環境 JSON） |
